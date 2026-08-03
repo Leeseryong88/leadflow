@@ -3,7 +3,7 @@ import { LeadFlowApp } from "../LeadFlowApp";
 
 export const metadata: Metadata = {
   title: "보고서 | LeadFlow",
-  description: "사내 주간 보고",
+  description: "IIC Weely",
 };
 
 export default function ReportsPage() {

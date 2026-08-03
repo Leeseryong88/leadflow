@@ -9,10 +9,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const base = new URL(`${protocol}://${host}`);
   return {
     metadataBase: base,
-    title: "LeadFlow | Weekly Leadership Update",
-    description: "사내 주간 보고",
-    openGraph: { title: "LeadFlow", description: "사내 주간 보고", images: [new URL("/og.png", base)] },
-    twitter: { card: "summary_large_image", title: "LeadFlow", description: "사내 주간 보고", images: [new URL("/og.png", base)] },
+    title: "IIC Weely Report",
+    description: "IIC Weely",
+    openGraph: { title: "IIC Weely Report", description: "IIC Weely", images: [new URL("/iic-weely-report.png", base)] },
+    twitter: { card: "summary_large_image", title: "IIC Weely Report", description: "IIC Weely", images: [new URL("/iic-weely-report.png", base)] },
   };
 }
 

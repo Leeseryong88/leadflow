@@ -14,6 +14,7 @@ type Report = {
 
 const today = new Date().toISOString().slice(0, 10);
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+const DIRECT_EVENT_TYPE = "__direct__:";
 
 /** 보고 기준일 선택 → 선택한 날 +1주를 `YYYY년 M월 N주차`로 기록 */
 function weekLabelFromDate(value: string) {
@@ -37,7 +38,7 @@ function createDraft(weekDate = today) {
   return {
     weekLabel: weekLabelFromDate(weekDate),
     travel: [] as Travel[],
-    events: [{ date: today, type: "회의", description: "", location: "", notes: "" }] as EventItem[],
+    events: [{ date: today, type: "", description: "", location: "", notes: "" }] as EventItem[],
     issues: [{ category: "핵심이슈", details: "", deadline: "" }] as Issue[],
     ceoRequests: "",
     keyQuestion: "",
@@ -199,6 +200,10 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
     try {
       const report: Report = {
         ...draft,
+        events: draft.events.map((row) => ({
+          ...row,
+          type: row.type.startsWith(DIRECT_EVENT_TYPE) ? row.type.slice(DIRECT_EVENT_TYPE.length).trim() : row.type,
+        })),
         travel: draft.travel.map((row) => ({
           ...row,
           name: profile.name,
@@ -276,12 +281,12 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
         <SurveyHeader no="02" title="부서의 주요 일정" subtitle="Key Dates & Events" />
         {draft.events.map((row, index) => <div className={`entry-grid four${index > 0 ? " entry-follow" : ""}`} key={index}>
           <label><span className="field-label">날짜</span><input type="date" value={row.date} onChange={(event) => rowUpdate<EventItem>("events", index, "date", event.target.value)} aria-label="날짜" /></label>
-          <label><span className="field-label">유형</span><input value={row.type} onChange={(event) => rowUpdate<EventItem>("events", index, "type", event.target.value)} aria-label="유형" /></label>
+          <label><span className="field-label">유형</span><select value={row.type.startsWith(DIRECT_EVENT_TYPE) ? DIRECT_EVENT_TYPE : row.type} onChange={(event) => rowUpdate<EventItem>("events", index, "type", event.target.value)} aria-label="유형"><option value="">- 선택 -</option><option value="대표님 회의">대표님 회의</option><option value="워크샵">워크샵</option><option value="행사">행사</option><option value="Store Open">Store Open</option><option value="촬영">촬영</option><option value="계약">계약</option><option value="제품 출시">제품 출시</option><option value={DIRECT_EVENT_TYPE}>직접 입력</option></select>{row.type.startsWith(DIRECT_EVENT_TYPE)&&<input value={row.type.slice(DIRECT_EVENT_TYPE.length)} onChange={(event) => rowUpdate<EventItem>("events", index, "type", `${DIRECT_EVENT_TYPE}${event.target.value}`)} placeholder="유형을 입력하세요" aria-label="일정 유형 직접 입력" autoFocus/>}</label>
           <label><span className="field-label">일정 설명</span><input value={row.description} onChange={(event) => rowUpdate<EventItem>("events", index, "description", event.target.value)} placeholder="핵심 일정" aria-label="일정 설명" /></label>
           <label><span className="field-label">장소</span><input value={row.location} onChange={(event) => rowUpdate<EventItem>("events", index, "location", event.target.value)} aria-label="장소" /></label>
           <button type="button" className="remove" aria-label="주요 일정 행 삭제" onClick={() => update("events", draft.events.filter((_, rowIndex) => rowIndex !== index))}>×</button>
         </div>)}
-        <button type="button" className="add-row" onClick={() => update("events", [...draft.events, { date: today, type: "회의", description: "", location: "", notes: "" }])}>+ 주요 일정 추가</button>
+        <button type="button" className="add-row" onClick={() => update("events", [...draft.events, { date: today, type: "", description: "", location: "", notes: "" }])}>+ 주요 일정 추가</button>
       </section>
 
       <section className="survey-section">

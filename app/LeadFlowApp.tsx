@@ -276,13 +276,14 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
   }
 
   return <div className="content">
-    <SectionTitle title="내 보고 이력" action={onCreate ? <button className="primary" onClick={onCreate}>+ 새 보고서 작성</button> : undefined} />
+    <SectionTitle title="내 보고 이력" action={onCreate ? <button type="button" className="primary report-create-desktop" onClick={onCreate}>+ 새 보고서 작성</button> : undefined} />
     <div className="filters">
       <div className="search"><span>⌕</span><input placeholder="작성자, 부서, 주차 검색" value={query} onChange={(e) => updateQuery(e.target.value)} /></div>
       <span className="result-count">{filtered.length}건</span>
     </div>
     <section className="panel">
       <ReportTable reports={paged} onSelect={setSelected} empty="조건에 맞는 보고서가 없습니다." />
+      {onCreate && <button type="button" className="mobile-report-create" onClick={onCreate} aria-label="새 보고서 작성"><span>+</span><b>새 보고서 작성</b></button>}
       <div className="pagination">
         <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>←</button>
         <span>{currentPage} / {totalPages}</span>
@@ -576,7 +577,10 @@ function AIWorkspace({ session }: { session: Session }) {
     }
   }
 
-  useEffect(() => { void refreshSaved(); }, [session.idToken]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void refreshSaved(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [session.idToken]);
 
   function openPrompt() {
     setError("");
