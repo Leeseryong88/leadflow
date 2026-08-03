@@ -15,7 +15,7 @@
 
 .survey-form{display:flex;flex-direction:column;gap:18px}.survey-section{background:#fff;border:1px solid var(--line);padding:30px;box-shadow:0 5px 20px rgba(23,41,72,.035)}.survey-section-head{display:flex;align-items:center;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--line)}.survey-section-head>span{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;background:var(--navy);color:#fff;font:500 14px "DM Mono",monospace}.survey-section-head h2{margin:0;font-size:20px;letter-spacing:-.025em}.survey-section-head p{margin:5px 0 0;color:var(--blue);font:10px "DM Mono",monospace}.survey-section .large-field{padding-bottom:0}.survey-section .large-field textarea{min-height:145px}.survey-submit{position:sticky;bottom:12px;z-index:10;display:flex;align-items:center;justify-content:flex-end;gap:24px;background:var(--navy);color:#fff;padding:16px 22px;box-shadow:0 14px 35px rgba(13,29,58,.24)}.survey-submit .primary{min-width:150px}
 
-.entry-grid.travel.trip{grid-template-columns:.7fr 1.4fr 1.1fr 1.4fr}.entry-grid.travel.leave{grid-template-columns:.7fr 1.6fr}.travel-type-badge{display:flex;flex-direction:column;gap:8px;justify-content:flex-end}.travel-type-badge b{display:grid;place-items:center;min-height:42px;padding:0 12px;border:1px solid #c9d7ef;background:#eff4ff;color:var(--blue);font-size:12px}.entry-grid.travel.leave .travel-type-badge b{border-color:#e2c98a;background:#fff8e8;color:#8a6a14}.entry-grid.entry-follow .travel-type-badge .field-label{display:none}.travel-type-pick{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:18px;padding:14px;border:1px dashed #c5d0e0;background:#f7f9fc}.travel-type-pick>button.travel-pick-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;border-radius:999px;padding:10px 16px;font-size:12px;font-weight:700;line-height:1;box-shadow:0 2px 8px rgba(20,40,80,.06);transition:.15s ease}.travel-type-pick>button.travel-pick-btn>i{font-style:normal;font-size:13px;opacity:.85}.travel-type-pick>button.travel-pick-btn.trip{border-color:#adc4f0;background:linear-gradient(180deg,#f7faff,#eaf1ff);color:#1f5eff}.travel-type-pick>button.travel-pick-btn.leave{border-color:#e4cb8d;background:linear-gradient(180deg,#fffdf7,#fff4d8);color:#8a6a14}.travel-type-pick>button.travel-pick-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(20,40,80,.12)}.travel-type-pick>button.travel-pick-cancel{border:1px solid #d5dbe6;border-radius:999px;background:#fff;color:#6d7788;padding:10px 14px;font-size:12px;font-weight:700}.travel-type-pick>button.travel-pick-cancel:hover{background:#f3f5f8;color:#38445a}.travel-range-field{position:relative}.date-range-picker{position:relative}.date-range-trigger{width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid #cfd7e5;border-radius:4px;background:#fff;padding:10px 12px;color:var(--ink);font-size:11px;text-align:left}.date-range-trigger.placeholder{color:#8b94a3}.date-range-trigger i{font-style:normal;color:#7d8aa0}.date-range-trigger:hover{border-color:var(--blue)}.date-range-popover{position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:300px;padding:14px;background:#fff;border:1px solid var(--line);box-shadow:0 16px 40px rgba(20,40,80,.16)}.date-range-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.date-range-head strong{font:500 13px "DM Mono",monospace}.date-range-head button{width:30px;height:30px;border:1px solid var(--line);background:#fff}.date-range-hint{margin:0 0 10px;color:#7a8798;font-size:10px}.date-range-weekdays,.date-range-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}.date-range-weekdays span{text-align:center;padding:4px 0;color:#8b94a3;font:10px "DM Mono",monospace}.date-range-empty{min-height:34px}.date-range-day{min-height:34px;border:0;border-radius:4px;background:transparent;color:var(--ink);font-size:11px}.date-range-day:hover{background:#eef3ff}.date-range-day.is-today{box-shadow:inset 0 0 0 1px #b7c8ef}.date-range-day.in-range{background:#e8efff;border-radius:0}.date-range-day.is-edge{background:var(--blue);color:#fff;border-radius:4px;font-weight:700}
+.entry-grid.travel.trip{grid-template-columns:.7fr 1.4fr 1.1fr 1.4fr}.entry-grid.travel.leave{grid-template-columns:.7fr 1.6fr}.travel-type-badge{display:flex;flex-direction:column;gap:8px;justify-content:flex-end}.travel-type-badge b{display:grid;place-items:center;width:100%;padding:10px;border:1px solid #cfd7e5;border-radius:4px;background:#eff4ff;color:var(--blue);font-size:11px;font-weight:700;line-height:1.4;box-sizing:border-box}.entry-grid.travel.leave .travel-type-badge b{background:#fff8e8;color:#8a6a14}.entry-grid.entry-follow .travel-type-badge .field-label{display:none}.travel-type-pick{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:18px;padding:14px;border:1px dashed #c5d0e0;background:#f7f9fc}.travel-type-pick>button.travel-pick-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;border-radius:999px;padding:10px 16px;font-size:12px;font-weight:700;line-height:1;box-shadow:0 2px 8px rgba(20,40,80,.06);transition:.15s ease}.travel-type-pick>button.travel-pick-btn>i{font-style:normal;font-size:13px;opacity:.85}.travel-type-pick>button.travel-pick-btn.trip{border-color:#adc4f0;background:linear-gradient(180deg,#f7faff,#eaf1ff);color:#1f5eff}.travel-type-pick>button.travel-pick-btn.leave{border-color:#e4cb8d;background:linear-gradient(180deg,#fffdf7,#fff4d8);color:#8a6a14}.travel-type-pick>button.travel-pick-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(20,40,80,.12)}.travel-type-pick>button.travel-pick-cancel{border:1px solid #d5dbe6;border-radius:999px;background:#fff;color:#6d7788;padding:10px 14px;font-size:12px;font-weight:700}.travel-type-pick>button.travel-pick-cancel:hover{background:#f3f5f8;color:#38445a}.travel-range-field{position:relative}.date-range-picker{position:relative}.date-range-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid #cfd7e5;border-radius:4px;background:#fff;padding:10px;color:var(--ink);font-size:11px;font-weight:400;line-height:1.4;text-align:left;transition:.18s}.date-range-trigger.placeholder{color:#8b94a3}.date-range-trigger i{font-style:normal;color:#7d8aa0;font-size:11px}.date-range-trigger:hover{border-color:var(--blue)}.date-range-trigger:focus,.date-range-trigger:focus-visible{border-color:var(--blue);box-shadow:0 0 0 3px rgba(31,94,255,.1);outline:none}.date-range-popover{position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:300px;padding:14px;background:#fff;border:1px solid var(--line);box-shadow:0 16px 40px rgba(20,40,80,.16)}.date-range-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.date-range-head strong{font:500 13px "DM Mono",monospace}.date-range-head button{width:30px;height:30px;border:1px solid var(--line);background:#fff}.date-range-hint{margin:0 0 10px;color:#7a8798;font-size:10px}.date-range-weekdays,.date-range-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}.date-range-weekdays span{text-align:center;padding:4px 0;color:#8b94a3;font:10px "DM Mono",monospace}.date-range-empty{min-height:34px}.date-range-day{min-height:34px;border:0;border-radius:4px;background:transparent;color:var(--ink);font-size:11px}.date-range-day:hover{background:#eef3ff}.date-range-day.is-today{box-shadow:inset 0 0 0 1px #b7c8ef}.date-range-day.in-range{background:#e8efff;border-radius:0}.date-range-day.is-edge{background:var(--blue);color:#fff;border-radius:4px;font-weight:700}
 
 .leader-report-hub{position:relative}.report-hub-new{position:absolute;z-index:3;top:42px;right:3.5vw}.writer-page{max-width:1240px;padding-top:28px;padding-bottom:40px}.report-compose{display:flex;flex-direction:column;background:#f4f6f9;border:1px solid var(--line);box-shadow:0 12px 40px rgba(20,40,80,.08)}.report-compose-head{position:relative;display:flex;align-items:center;gap:32px;flex:0 0 auto;padding:24px 72px 24px 32px;border-bottom:1px solid var(--line);background:#fff}.report-compose-head>div:first-child{flex:1}.report-compose-head h1{margin:4px 0 5px;font-size:26px;letter-spacing:-.04em}.report-compose-head p{margin:0;color:#7a8798;font-size:11px}.report-week-picker{display:flex;align-items:flex-end;gap:10px}.report-week-picker label{min-width:170px}.report-week-picker label,.report-week-picker input{font-size:10px}.report-week-picker>span{display:grid;place-items:center;height:42px;padding:0 15px;border:1px solid #c9d7ef;background:#eff4ff;color:var(--blue);font:600 10px "DM Mono",monospace;white-space:nowrap}.report-modal-close{position:absolute;top:20px;right:22px;display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:50%;background:#eef1f5;color:#56657a;font-size:21px;cursor:pointer}.report-modal-close:hover{background:#e1e6ed;color:var(--navy)}.report-compose-body{padding:24px 32px 36px}.survey-submit-actions{display:flex;gap:8px}.survey-submit-actions .secondary{min-width:90px;border-color:#64748b;background:transparent;color:#fff}.survey-submit-actions .secondary:hover{background:rgba(255,255,255,.08)}
 
@@ -66,22 +66,14 @@
   }
   .entry-grid.travel .travel-type-badge{
     display:flex;
-    flex-direction:row;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
+    flex-direction:column;
+    align-items:stretch;
+    gap:8px;
     min-width:0;
     padding-right:34px;
   }
   .entry-grid.travel .travel-type-badge .field-label{
     display:block;
-  }
-  .entry-grid.travel .travel-type-badge b{
-    display:inline-flex;
-    width:auto;
-    min-height:0;
-    padding:7px 12px;
-    white-space:nowrap;
   }
   .entry-grid.travel>label,
   .entry-grid.travel .travel-range-field,
@@ -89,10 +81,14 @@
     width:100%;
     min-width:0;
   }
-  .entry-grid.travel input,
-  .entry-grid.travel .date-range-trigger{
+  .survey-section .entry-grid input,
+  .survey-section .entry-grid select,
+  .survey-section .entry-grid .date-range-trigger,
+  .survey-section .entry-grid .travel-type-badge b{
     min-height:46px;
+    padding:12px 14px;
     font-size:16px;
+    line-height:1.4;
   }
   .entry-grid.travel .date-range-trigger span{
     overflow:hidden;
