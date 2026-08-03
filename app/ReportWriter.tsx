@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useState } from "react";
 import { createDocument, Profile, Session } from "./firebase-rest";
 
 type Travel = { type: string; name: string; start: string; end: string; destination: string; purpose: string; notes: string };
@@ -13,7 +13,6 @@ type Report = {
 };
 
 const today = new Date().toISOString().slice(0, 10);
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DIRECT_EVENT_TYPE = "__direct__:";
 
 /** 보고 기준일 선택 → 선택한 날 +1주를 `YYYY년 M월 N주차`로 기록 */
@@ -22,16 +21,6 @@ function weekLabelFromDate(value: string) {
   const target = new Date(reportDate);
   target.setDate(reportDate.getDate() + 7);
   return `${target.getFullYear()}년 ${target.getMonth() + 1}월 ${Math.ceil(target.getDate() / 7)}주차`;
-}
-
-function formatRange(start: string, end: string) {
-  if (!start) return "기간 선택";
-  if (!end || start === end) return start;
-  return `${start} ~ ${end}`;
-}
-
-function toDateKey(year: number, month: number, day: number) {
-  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function createDraft(weekDate = today) {
@@ -47,115 +36,6 @@ function createDraft(weekDate = today) {
 
 function SurveyHeader({ no, title, subtitle }: { no: string; title: string; subtitle: string }) {
   return <div className="survey-section-head"><span>{no}</span><div><h2>{title}</h2><p>{subtitle}</p></div></div>;
-}
-
-function DateRangePicker({ start, end, onChange }: { start: string; end: string; onChange: (start: string, end: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [cursor, setCursor] = useState(() => {
-    const base = start || today;
-    return new Date(`${base}T12:00:00`);
-  });
-  const [picking, setPicking] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-        setPicking(null);
-      }
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [open]);
-
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const first = new Date(year, month, 1);
-  const days = new Date(year, month + 1, 0).getDate();
-  const cells = [...Array(first.getDay()).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
-
-  const rangeStart = picking || start;
-  const rangeEnd = picking ? "" : end;
-
-  function inRange(value: string) {
-    if (!rangeStart) return false;
-    if (!rangeEnd) return value === rangeStart;
-    const from = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
-    const to = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
-    return value >= from && value <= to;
-  }
-
-  function isEdge(value: string) {
-    if (!rangeStart) return false;
-    if (!rangeEnd) return value === rangeStart;
-    const from = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
-    const to = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
-    return value === from || value === to;
-  }
-
-  function selectDay(day: number) {
-    const value = toDateKey(year, month, day);
-    if (!picking) {
-      setPicking(value);
-      return;
-    }
-    const nextStart = picking <= value ? picking : value;
-    const nextEnd = picking <= value ? value : picking;
-    onChange(nextStart, nextEnd);
-    setPicking(null);
-    setOpen(false);
-  }
-
-  return (
-    <div className="date-range-picker" ref={rootRef}>
-      <button
-        type="button"
-        className={`date-range-trigger ${start ? "" : "placeholder"}`}
-        onClick={() => {
-          setOpen((current) => !current);
-          setPicking(null);
-          if (start) setCursor(new Date(`${start}T12:00:00`));
-        }}
-      >
-        <span>{formatRange(start, end)}</span>
-        <i>▦</i>
-      </button>
-      {open && (
-        <div className="date-range-popover" role="dialog" aria-label="기간 선택">
-          <div className="date-range-head">
-            <button type="button" onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label="이전 달">←</button>
-            <strong>{year}년 {month + 1}월</strong>
-            <button type="button" onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="다음 달">→</button>
-          </div>
-          <p className="date-range-hint">{picking ? "종료일을 선택하세요" : "시작일을 선택하세요"}</p>
-          <div className="date-range-weekdays">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
-          <div className="date-range-grid">
-            {cells.map((day, index) => {
-              if (!day) return <span key={`empty-${index}`} className="date-range-empty" />;
-              const value = toDateKey(year, month, day);
-              return (
-                <button
-                  type="button"
-                  key={value}
-                  className={[
-                    "date-range-day",
-                    value === today ? "is-today" : "",
-                    inRange(value) ? "in-range" : "",
-                    isEdge(value) ? "is-edge" : "",
-                  ].filter(Boolean).join(" ")}
-                  onClick={() => selectDay(day)}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function ReportWriter({ session, profile, onSaved, onClose }: { session: Session; profile: Profile; onSaved: (report: Report) => void; onClose: () => void }) {
@@ -174,9 +54,15 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
     update(key, rows);
   }
 
-  function updateTravelRange(index: number, start: string, end: string) {
+  function updateTravelType(index: number, type: string) {
     const rows = [...draft.travel];
-    rows[index] = { ...rows[index], start, end };
+    const isLeave = type.includes("휴가");
+    rows[index] = {
+      ...rows[index],
+      type,
+      destination: isLeave ? "" : rows[index].destination,
+      purpose: isLeave ? "" : rows[index].purpose,
+    };
     update("travel", rows);
   }
 
@@ -184,8 +70,8 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
     update("travel", [...draft.travel, {
       type,
       name: "",
-      start: "",
-      end: "",
+      start: today,
+      end: today,
       destination: "",
       purpose: "",
       notes: "",
@@ -250,11 +136,10 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
         <SurveyHeader no="01" title="출장 및 휴가" subtitle="Travel & Time Off" />
         {draft.travel.map((row, index) => {
           const isLeave = row.type.includes("휴가");
-          const prev = draft.travel[index - 1];
-          const follow = Boolean(prev && prev.type.includes("휴가") === isLeave);
-          return <div className={`entry-grid travel ${isLeave ? "leave" : "trip"}${follow ? " entry-follow" : ""}`} key={index}>
-            <div className="travel-type-badge" aria-label="구분"><span className="field-label">구분</span><b>{row.type}</b></div>
-            <label className="travel-range-field"><span className="field-label">기간</span><DateRangePicker start={row.start} end={row.end} onChange={(start, end) => updateTravelRange(index, start, end)} /></label>
+          return <div className={`entry-grid ${isLeave ? "three" : "five"}${index > 0 ? " entry-follow" : ""}`} key={index}>
+            <label><span className="field-label">구분</span><select value={isLeave ? "휴가" : "출장"} onChange={(event) => updateTravelType(index, event.target.value)} aria-label="구분"><option value="출장">출장</option><option value="휴가">휴가</option></select></label>
+            <label><span className="field-label">시작일</span><input type="date" value={row.start} onChange={(event) => rowUpdate<Travel>("travel", index, "start", event.target.value)} aria-label="시작일" /></label>
+            <label><span className="field-label">종료일</span><input type="date" value={row.end} onChange={(event) => rowUpdate<Travel>("travel", index, "end", event.target.value)} aria-label="종료일" /></label>
             {!isLeave && <>
               <label><span className="field-label">목적지</span><input value={row.destination} onChange={(event) => rowUpdate<Travel>("travel", index, "destination", event.target.value)} placeholder="도시/장소" aria-label="목적지" /></label>
               <label><span className="field-label">출장목적</span><input value={row.purpose} onChange={(event) => rowUpdate<Travel>("travel", index, "purpose", event.target.value)} placeholder="출장 목적" aria-label="출장목적" /></label>
