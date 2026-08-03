@@ -814,10 +814,16 @@ function AskChatbot({session}:{session:Session}){
   const [messages,setMessages]=useState<{role:string;text:string}[]>([]);
   const [asking,setAsking]=useState(false);
   const bodyRef=useRef<HTMLDivElement>(null);
+  const inputRef=useRef<HTMLInputElement>(null);
   useEffect(()=>{
     const el=bodyRef.current;
     if(el)el.scrollTop=el.scrollHeight;
   },[messages,open]);
+  useEffect(()=>{
+    if(!open)return;
+    const timer=window.setTimeout(()=>inputRef.current?.focus(),0);
+    return()=>window.clearTimeout(timer);
+  },[open,asking]);
   async function ask(e:FormEvent){
     e.preventDefault();
     if(!question.trim()||asking)return;
@@ -825,12 +831,16 @@ function AskChatbot({session}:{session:Session}){
     setQuestion("");
     setMessages(m=>[...m,{role:"user",text:q}]);
     setAsking(true);
+    requestAnimationFrame(()=>inputRef.current?.focus());
     try{
       const result=await callFunction<{answer:string}>("askLeadFlow",{question:q,history:messages.slice(-6)},session.idToken);
       setMessages(m=>[...m,{role:"ai",text:result.answer}]);
     }catch(err){
       setMessages(m=>[...m,{role:"ai",text:err instanceof Error?err.message:"답변을 생성하지 못했습니다."}]);
-    }finally{setAsking(false)}
+    }finally{
+      setAsking(false);
+      requestAnimationFrame(()=>inputRef.current?.focus());
+    }
   }
   return <div className={`ask-fab${open?" open":""}`}>
     {open&&<div className="ask-fab-panel" role="dialog" aria-label="LeadFlow 질문">
@@ -844,7 +854,7 @@ function AskChatbot({session}:{session:Session}){
         {asking&&<div className="bubble ai asking">답변 작성 중…</div>}
       </div>
       <form className="chat-input ask-fab-input" onSubmit={ask}>
-        <input value={question} onChange={e=>setQuestion(e.target.value)} placeholder="질문 입력" disabled={asking} autoFocus/>
+        <input ref={inputRef} value={question} onChange={e=>setQuestion(e.target.value)} placeholder="질문 입력" autoFocus/>
         <button type="submit" disabled={asking||!question.trim()} aria-label="전송">↑</button>
       </form>
     </div>}
