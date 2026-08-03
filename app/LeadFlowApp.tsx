@@ -94,7 +94,7 @@ function Login({ onLogin }: { onLogin: (session: Session, profile: Profile) => v
       <form className="login-card" onSubmit={submit}>
         <div className="mobile-brand"><span className="brand-mark">L</span> LEADFLOW</div>
         <h2>로그인</h2>
-        <label>사번 또는 이메일<input value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="사번 또는 이메일 입력" autoComplete="username" required/></label>
+        <label>사번<input value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="사번입력" autoComplete="username" required/></label>
         <label>비밀번호<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="비밀번호 입력" autoComplete="current-password" required/></label>
         {error && <div className="error-box">{error}</div>}
         <button className="primary wide" disabled={loading}>{loading ? "확인 중..." : "로그인"}</button>
