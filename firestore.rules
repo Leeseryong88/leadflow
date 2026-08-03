@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function isBootstrapAdmin() { return signedIn() && request.auth.uid == 'ttBEwYDRW3O9iZPKKnDJrUxwjdm2'; }
+    function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function isAdmin() { return isBootstrapAdmin() || (hasProfile() && profile().data.role == 'admin' && profile().data.active == true); }
+    function passwordChanged() { return isBootstrapAdmin() || (hasProfile() && profile().data.mustChangePassword == false); }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow update: if request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword', 'passwordChangedAt'])
+        && request.resource.data.mustChangePassword == false;
+      allow create: if (isBootstrapAdmin()
+          && request.auth.uid == userId
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.role == 'admin'
+          && request.resource.data.active == true
+          && request.resource.data.mustChangePassword == false
+          && request.resource.data.email == 'monster1003@gentlemonster.com')
+        || (isAdmin()
+          && request.resource.data.uid == userId
+          && request.resource.data.role in ['admin', 'leader']
+          && request.resource.data.active == true
+          && request.resource.data.mustChangePassword == true
+          && request.resource.data.createdBy == request.auth.uid);
+      allow delete: if false;
+    }
+
+    match /reports/{reportId} {
+      allow read: if passwordChanged() && (isAdmin() || resource.data.authorId == request.auth.uid);
+      allow create: if passwordChanged()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.department == profile().data.department
+        && request.resource.data.authorName == profile().data.name;
+      allow update: if false;
+      allow delete: if isAdmin() && passwordChanged();
+    }
+
+    match /summaries/{summaryId} {
+      allow read, create, delete: if isAdmin() && passwordChanged();
+      allow update: if false;
+    }
+  }
+}

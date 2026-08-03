@@ -1,0 +1,12 @@
+.env*
+.firebase
+.openai
+.wrangler
+dist
+functions
+worker
+build
+db
+drizzle
+examples
+tests
