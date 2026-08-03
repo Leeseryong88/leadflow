@@ -527,26 +527,70 @@ function Users({ session, profile, reports }: { session: Session; profile: Profi
   </div>;
 }
 
+function escapePrintText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function printSummaryHtml(title: string, html: string) {
-  const popup = window.open("", "_blank", "noopener,noreferrer,width=920,height=900");
-  if (!popup) return;
-  popup.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><title>${title.replace(/</g, "&lt;")}</title>
+  if (!html?.trim() || typeof document === "undefined") return;
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", "print-frame");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;opacity:0;pointer-events:none;z-index:-1;";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  const win = iframe.contentWindow;
+  if (!doc || !win) {
+    iframe.remove();
+    return;
+  }
+
+  doc.open();
+  doc.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><title>${escapePrintText(title || "요약")}</title>
 <style>
   @page{margin:18mm}
-  body{margin:0;padding:28px;color:#111f39;font:14px/1.65 "Noto Sans KR",Manrope,sans-serif;background:#fff}
+  html,body{margin:0;padding:0;background:#fff}
+  body{padding:28px;color:#111f39;font:14px/1.65 "Noto Sans KR",Manrope,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .ceo-brief header{margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #1f5eff}
   .ceo-brief .eyebrow{margin:0 0 8px;color:#1f5eff;font:500 12px "DM Mono",monospace;letter-spacing:.12em}
   .ceo-brief h1{margin:0 0 8px;font-size:28px;letter-spacing:-.03em}
   .ceo-brief .period{margin:0;color:#6d7788;font:500 12px "DM Mono",monospace}
-  .ceo-brief section{margin:22px 0}
+  .ceo-brief section{margin:22px 0;break-inside:avoid}
   .ceo-brief h2{margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid #dfe5ef;font-size:16px}
   .ceo-brief p,.ceo-brief li{font-size:13px;color:#24324a}
   .ceo-brief ul{margin:0;padding-left:18px}
   .ceo-brief li{margin:6px 0}
 </style></head><body>${html}</body></html>`);
-  popup.document.close();
-  popup.focus();
-  setTimeout(() => { popup.print(); }, 250);
+  doc.close();
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    win.removeEventListener("afterprint", cleanup);
+    iframe.remove();
+  };
+
+  const triggerPrint = () => {
+    try {
+      win.focus();
+      win.print();
+    } catch {
+      cleanup();
+      return;
+    }
+    window.setTimeout(cleanup, 60_000);
+  };
+
+  win.addEventListener("afterprint", cleanup);
+  if (doc.readyState === "complete") window.setTimeout(triggerPrint, 50);
+  else iframe.onload = () => window.setTimeout(triggerPrint, 50);
 }
 
 function fmtDateTime(value: string) {
