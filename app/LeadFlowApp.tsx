@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   callFunction,
   changePassword,
+  clearSession,
   createDocument,
   deleteReport,
   deleteUserAccount,
@@ -15,6 +16,8 @@ import {
   listSavedSummaries,
   queryDocumentsByField,
   Profile,
+  restoreSession,
+  saveSession,
   Session,
   signIn,
 } from "./firebase-rest";
@@ -80,7 +83,7 @@ function Login({ onLogin }: { onLogin: (session: Session, profile: Profile) => v
       const session = await signIn(identifier, password);
       const profile = await getOrBootstrapProfile(session);
       if (!profile || !profile.active) throw new Error("사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.");
-      sessionStorage.setItem("leadflow_session", JSON.stringify(session));
+      saveSession(session);
       onLogin(session, profile);
     } catch (err) { setError(err instanceof Error ? err.message : "로그인을 완료하지 못했습니다."); }
     finally { setLoading(false); }
@@ -108,7 +111,7 @@ function PasswordGate({ session, onDone }: { session: Session; profile: Profile;
     if (password.length < 8) return setError("비밀번호는 8자 이상으로 설정해 주세요.");
     if (password !== confirm) return setError("비밀번호가 서로 다릅니다.");
     setLoading(true); setError("");
-    try { const next = await changePassword(session, password); sessionStorage.setItem("leadflow_session", JSON.stringify(next)); onDone(next); }
+    try { const next = await changePassword(session, password); saveSession(next); onDone(next); }
     catch (err) { setError(err instanceof Error ? err.message : "변경하지 못했습니다."); } finally { setLoading(false); }
   }
   return <div className="gate"><form className="gate-card" onSubmit={submit}><h2>비밀번호 변경</h2><p className="muted">새로 사용할 비밀번호를 입력해 주세요.</p><label>새 비밀번호<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="8자 이상" required/></label><label>새 비밀번호 확인<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="한 번 더 입력" required/></label>{error&&<div className="error-box">{error}</div>}<button className="primary wide" disabled={loading}>{loading?"변경 중...":"비밀번호 변경"}</button></form></div>;
@@ -812,7 +815,16 @@ export function LeadFlowApp(){
   const router = useRouter();
   const page = pageFromPath(pathname);
   const [session,setSession]=useState<Session|null>(null);const [profile,setProfile]=useState<Profile|null>(null);const [reports,setReports]=useState<Report[]>([]);const [loading,setLoading]=useState(true);
-  useEffect(()=>{void (async()=>{const raw=sessionStorage.getItem("leadflow_session");if(!raw){setLoading(false);return}const saved=JSON.parse(raw) as Session;if(saved.expiresAt<Date.now()){sessionStorage.removeItem("leadflow_session");setLoading(false);return}try{const p=await getOrBootstrapProfile(saved);if(p){setSession(saved);setProfile(p)}}finally{setLoading(false)}})()},[]);
+  useEffect(()=>{void (async()=>{
+    try{
+      const saved=await restoreSession();
+      if(!saved)return;
+      const p=await getOrBootstrapProfile(saved);
+      if(p?.active){setSession(saved);setProfile(p)}
+      else clearSession();
+    }catch{clearSession()}
+    finally{setLoading(false)}
+  })()},[]);
   useEffect(()=>{
     if(!session||!profile||profile.mustChangePassword)return;
     const load=profile.role==="admin"
@@ -831,7 +843,7 @@ export function LeadFlowApp(){
   if(!session||!profile)return <Login onLogin={(s,p)=>{setSession(s);setProfile(p);if(pathname==="/")router.replace("/reports")}}/>;
   if(profile.mustChangePassword)return <PasswordGate session={session} profile={profile} onDone={s=>{setSession(s);setProfile({...profile,mustChangePassword:false})}}/>;
   const setPage=(next:string)=>{const target=next==="calendar"?"reports":next;router.push(PAGE_PATHS[target]||"/reports")};
-  const logout=()=>{sessionStorage.removeItem("leadflow_session");setSession(null);setProfile(null);router.replace("/reports")};
+  const logout=()=>{clearSession();setSession(null);setProfile(null);router.replace("/reports")};
   const openReportWriter=()=>router.push("/reports/write");
   const closeReportWriter=()=>router.push("/reports");
   const body=page==="write"?<div className="content writer-page"><ReportWriter session={session} profile={profile} onClose={closeReportWriter} onSaved={report=>{setReports(current=>[report,...current]);router.push("/reports")}}/></div>:page==="reports"?<Reports reports={reports} profile={profile} session={session} onCreate={profile.role!=="admin"?openReportWriter:undefined} onDeleted={(id)=>setReports((current)=>current.filter((report)=>report.id!==id))}/>:page==="users"?<Users session={session} profile={profile} reports={reports}/>:page==="ai"?<AIWorkspace session={session}/>:null;

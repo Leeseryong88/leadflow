@@ -16,7 +16,10 @@ const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "";
 export const bootstrapAdminEmail = (process.env.NEXT_PUBLIC_BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase();
 export const bootstrapAdminUid = process.env.NEXT_PUBLIC_BOOTSTRAP_ADMIN_UID || "";
 export const firebaseReady = Boolean(apiKey && projectId);
+const SESSION_KEY = "leadflow_session";
+const REFRESH_SKEW_MS = 5 * 60 * 1000;
 const authUrl = (action: string) => `https://identitytoolkit.googleapis.com/v1/accounts:${action}?key=${apiKey}`;
+const refreshUrl = () => `https://securetoken.googleapis.com/v1/token?key=${apiKey}`;
 const docBase = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
 function loginEmail(identifier: string) {
@@ -33,10 +36,68 @@ async function jsonRequest<T>(url: string, init: RequestInit): Promise<T> {
       INVALID_LOGIN_CREDENTIALS: "사번 또는 비밀번호를 확인해 주세요.",
       TOO_MANY_ATTEMPTS_TRY_LATER: "로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요.",
       WEAK_PASSWORD: "비밀번호는 8자 이상으로 설정해 주세요.",
+      TOKEN_EXPIRED: "로그인이 만료되었습니다. 다시 로그인해 주세요.",
+      INVALID_REFRESH_TOKEN: "로그인이 만료되었습니다. 다시 로그인해 주세요.",
     };
     throw new Error(messages[raw] || raw);
   }
   return data as T;
+}
+
+export function saveSession(session: Session) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
+export function clearSession() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
+function readStoredSession(): Session | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try {
+    const saved = JSON.parse(raw) as Session;
+    if (!saved?.idToken || !saved?.refreshToken || !saved?.uid) return null;
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+export async function refreshSession(session: Session): Promise<Session> {
+  const result = await jsonRequest<{ id_token: string; refresh_token: string; user_id: string; expires_in: string }>(
+    refreshUrl(),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: session.refreshToken }),
+    },
+  );
+  return {
+    idToken: result.id_token,
+    refreshToken: result.refresh_token || session.refreshToken,
+    uid: result.user_id || session.uid,
+    expiresAt: Date.now() + Number(result.expires_in || 3600) * 1000,
+  };
+}
+
+export async function restoreSession(): Promise<Session | null> {
+  const saved = readStoredSession();
+  if (!saved) return null;
+  const needsRefresh = !saved.expiresAt || saved.expiresAt < Date.now() + REFRESH_SKEW_MS;
+  try {
+    const session = needsRefresh ? await refreshSession(saved) : saved;
+    saveSession(session);
+    return session;
+  } catch {
+    clearSession();
+    return null;
+  }
 }
 
 export async function signIn(identifier: string, password: string): Promise<Session> {
@@ -48,13 +109,18 @@ export async function signIn(identifier: string, password: string): Promise<Sess
 }
 
 export async function changePassword(session: Session, password: string) {
-  const result = await jsonRequest<{ idToken: string; refreshToken: string }>(authUrl("update"), {
+  const result = await jsonRequest<{ idToken: string; refreshToken: string; expiresIn?: string }>(authUrl("update"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ idToken: session.idToken, password, returnSecureToken: true }),
   });
   await patchDocument(`users/${session.uid}`, { mustChangePassword: false, passwordChangedAt: new Date().toISOString() }, result.idToken);
-  return { ...session, idToken: result.idToken, refreshToken: result.refreshToken };
+  return {
+    ...session,
+    idToken: result.idToken,
+    refreshToken: result.refreshToken,
+    expiresAt: Date.now() + Number(result.expiresIn || 3600) * 1000,
+  };
 }
 
 type FireValue = Record<string, unknown>;
