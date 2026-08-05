@@ -138,41 +138,96 @@ function ReportTable({ reports, onSelect, onDelete, empty }: { reports: Report[]
 
 type DayTravelItem = Travel & { department: string; name: string; key: string };
 type WeekSegment = { item: DayTravelItem; startCol: number; endCol: number; continuesLeft: boolean; continuesRight: boolean; lane: number };
+type CalRange = "week" | "fortnight" | "month";
+type CalKind = "leave" | "travel";
 
-function TravelCalendar({ reports, compact = false, onSelectDay }: { reports: Report[]; compact?: boolean; onSelectDay?: (date: string, items: DayTravelItem[]) => void }) {
-  const [cursor, setCursor] = useState(new Date());
-  const items = reports.flatMap((r) => (r.travel || []).map((t, travelIndex) => ({
+function toIsoDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function parseIsoDate(value: string) {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d, 12);
+}
+function startOfWeek(d: Date) {
+  const next = new Date(d);
+  next.setHours(12, 0, 0, 0);
+  next.setDate(next.getDate() - next.getDay());
+  return next;
+}
+function addDays(d: Date, n: number) {
+  const next = new Date(d);
+  next.setDate(next.getDate() + n);
+  return next;
+}
+function formatCalPeriodLabel(range: CalRange, anchor: Date) {
+  if (range === "month") return `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월`;
+  const start = startOfWeek(anchor);
+  const end = addDays(start, range === "week" ? 6 : 13);
+  const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+  return `${start.getFullYear()}년 ${fmt(start)} — ${fmt(end)}`;
+}
+function collectTravelItems(reports: Report[], kind: CalKind): DayTravelItem[] {
+  return reports.flatMap((r) => (r.travel || []).map((t, travelIndex) => ({
     ...t,
     department: r.department,
     name: t.name || r.authorName,
     key: `${r.id}-${travelIndex}`,
-  })));
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const first = new Date(year, month, 1);
-  const days = new Date(year, month + 1, 0).getDate();
-  const cells: (number | null)[] = [...Array(first.getDay()).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
-  while (cells.length % 7) cells.push(null);
-  const weeks: (number | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  const dateKey = (d: number) => `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  const inDay = (d: number) => items.filter((t) => t.start <= dateKey(d) && t.end >= dateKey(d));
-  const laneLimit = compact ? 2 : 3;
-  function openDay(d: number) {
-    const dayItems = inDay(d);
-    if (!dayItems.length) return;
-    onSelectDay?.(dateKey(d), dayItems);
+  }))).filter((t) => kind === "leave" ? t.type.includes("휴가") : !t.type.includes("휴가"));
+}
+function buildCalendarWeeks(range: CalRange, anchor: Date): (string | null)[][] {
+  if (range === "month") {
+    const year = anchor.getFullYear();
+    const month = anchor.getMonth();
+    const first = new Date(year, month, 1, 12);
+    const days = new Date(year, month + 1, 0).getDate();
+    const cells: (string | null)[] = [
+      ...Array(first.getDay()).fill(null),
+      ...Array.from({ length: days }, (_, i) => toIsoDate(new Date(year, month, i + 1, 12))),
+    ];
+    while (cells.length % 7) cells.push(null);
+    const weeks: (string | null)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    return weeks;
   }
+  const start = startOfWeek(anchor);
+  const weekCount = range === "week" ? 1 : 2;
+  return Array.from({ length: weekCount }, (_, weekIndex) => (
+    Array.from({ length: 7 }, (_, dayIndex) => toIsoDate(addDays(start, weekIndex * 7 + dayIndex)))
+  ));
+}
 
-  /** 한 주 안에서 각 출장·휴가를 연속 구간(바)으로 계산하고 겹치지 않게 줄(lane)을 배정한다. */
-  function weekSegments(week: (number | null)[]): WeekSegment[] {
+function TravelCalendar({
+  items,
+  kind,
+  range,
+  title,
+  anchor,
+  onSelectDay,
+}: {
+  items: DayTravelItem[];
+  kind: CalKind;
+  range: CalRange;
+  title: string;
+  anchor: Date;
+  onSelectDay?: (date: string, items: DayTravelItem[]) => void;
+}) {
+  const weeks = buildCalendarWeeks(range, anchor);
+  const inDay = (date: string) => items.filter((t) => t.start <= date && t.end >= date);
+  const laneLimit = range === "week" ? 16 : range === "fortnight" ? 10 : 3;
+  const dense = range !== "month";
+
+  function openDay(date: string) {
+    const dayItems = inDay(date);
+    if (!dayItems.length) return;
+    onSelectDay?.(date, dayItems);
+  }
+  function weekSegments(week: (string | null)[]): WeekSegment[] {
     const segments: Omit<WeekSegment, "lane">[] = [];
     for (const item of items) {
       let startCol = -1, endCol = -1;
-      week.forEach((d, col) => {
-        if (!d) return;
-        const key = dateKey(d);
-        if (item.start <= key && item.end >= key) {
+      week.forEach((date, col) => {
+        if (!date) return;
+        if (item.start <= date && item.end >= date) {
           if (startCol === -1) startCol = col;
           endCol = col;
         }
@@ -182,8 +237,8 @@ function TravelCalendar({ reports, compact = false, onSelectDay }: { reports: Re
         item,
         startCol,
         endCol,
-        continuesLeft: item.start < dateKey(week[startCol] as number),
-        continuesRight: item.end > dateKey(week[endCol] as number),
+        continuesLeft: item.start < (week[startCol] as string),
+        continuesRight: item.end > (week[endCol] as string),
       });
     }
     segments.sort((a, b) => a.startCol - b.startCol || (b.endCol - b.startCol) - (a.endCol - a.startCol));
@@ -196,54 +251,101 @@ function TravelCalendar({ reports, compact = false, onSelectDay }: { reports: Re
     });
   }
 
-  return <section className={`calendar panel${compact ? " compact" : ""}`}>
-    <div className="calendar-head">
-      <button type="button" onClick={() => setCursor(new Date(year, month - 1, 1))}>←</button>
-      <h2>{year}년 {month + 1}월</h2>
-      <button type="button" onClick={() => setCursor(new Date(year, month + 1, 1))}>→</button>
+  return <section className={`calendar panel cal-${kind}${dense ? " dense" : ""}`}>
+    <div className="calendar-head single">
+      <div className="calendar-head-title">
+        <p className="calendar-kind">{title}</p>
+        <h2>{formatCalPeriodLabel(range, anchor)}</h2>
+      </div>
     </div>
     <div className="weekdays">{["일", "월", "화", "수", "목", "금", "토"].map((d) => <span key={d}>{d}</span>)}</div>
     <div className="calendar-grid">{weeks.map((week, weekIndex) => {
       const segments = weekSegments(week);
+      const visibleLanes = Math.min(laneLimit, Math.max(1, ...segments.map((s) => s.lane + 1), 1));
       const visible = segments.filter((segment) => segment.lane < laneLimit);
       const hiddenCount = (col: number) => segments.filter((segment) => segment.lane >= laneLimit && segment.startCol <= col && segment.endCol >= col).length;
-      return <div className="cal-week" key={weekIndex}>
-        <div className="cal-week-days">
-          {week.map((d, i) => {
-            const dayItems = d ? inDay(d) : [];
-            const clickable = Boolean(d && dayItems.length);
-            const hidden = d ? hiddenCount(i) : 0;
+      const weekHeight = dense ? 36 + visibleLanes * 24 : undefined;
+      return <div className="cal-week" key={weekIndex} style={weekHeight ? { minHeight: weekHeight } : undefined}>
+        <div className="cal-week-days" style={weekHeight ? { minHeight: weekHeight } : undefined}>
+          {week.map((date, i) => {
+            const dayItems = date ? inDay(date) : [];
+            const clickable = Boolean(date && dayItems.length);
+            const hidden = date ? hiddenCount(i) : 0;
+            const dayNum = date ? Number(date.slice(8, 10)) : null;
             return <div
-              className={`day ${d && dateKey(d) === today ? "today" : ""}${clickable ? " has-travel" : ""}`}
+              className={`day ${date === today ? "today" : ""}${clickable ? " has-travel" : ""}`}
               key={i}
               role={clickable ? "button" : undefined}
               tabIndex={clickable ? 0 : undefined}
-              onClick={() => d && openDay(d)}
-              onKeyDown={(e) => { if (d && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openDay(d); } }}
-            >{d && <>
-              <b>{d}</b>
+              onClick={() => date && openDay(date)}
+              onKeyDown={(e) => { if (date && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openDay(date); } }}
+            >{date && <>
+              <b>{dayNum}</b>
               {hidden > 0 && <small className="day-more">+{hidden}건</small>}
             </>}</div>;
           })}
         </div>
-        <div className="cal-week-bars">
-          {visible.map((segment) => {
-            const isLeave = segment.item.type.includes("휴가");
-            return <span
+        <div className="cal-week-bars" style={dense ? { gridTemplateRows: `repeat(${visibleLanes}, 22px)` } : undefined}>
+          {visible.map((segment) => (
+            <span
               key={segment.item.key}
-              className={`cal-bar ${isLeave ? "leave" : "travel"}${segment.continuesLeft ? " cont-l" : ""}${segment.continuesRight ? " cont-r" : ""}`}
+              className={`cal-bar ${kind}${segment.continuesLeft ? " cont-l" : ""}${segment.continuesRight ? " cont-r" : ""}`}
               style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`, gridRow: segment.lane + 1 }}
               title={`${segment.item.name} · ${segment.item.type}${segment.item.destination ? ` · ${segment.item.destination}` : ""}`}
             >
-              <em>{isLeave ? "휴가" : "출장"}</em>
-              <span>{segment.item.name}</span>
-            </span>;
-          })}
+              <em>{kind === "leave" ? "휴가" : "출장"}</em>
+              <span>{segment.item.name}{kind === "travel" && segment.item.destination ? ` · ${segment.item.destination}` : ""}</span>
+            </span>
+          ))}
         </div>
       </div>;
     })}</div>
-    <div className="legend"><span><i className="dot travel"></i>출장</span><span><i className="dot leave"></i>휴가</span></div>
   </section>;
+}
+
+function AdminCalendarBoard({ reports, onSelectDay }: { reports: Report[]; onSelectDay: (date: string, items: DayTravelItem[]) => void }) {
+  const [range, setRange] = useState<CalRange>("week");
+  const [anchor, setAnchor] = useState(() => parseIsoDate(today));
+  const leaveItems = collectTravelItems(reports, "leave");
+  const travelItems = collectTravelItems(reports, "travel");
+
+  function shift(dir: -1 | 1) {
+    if (range === "month") setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1, 12));
+    else setAnchor(addDays(startOfWeek(anchor), dir * (range === "week" ? 7 : 14)));
+  }
+
+  return <div className="admin-calendar-board">
+    <div className="calendar-toolbar">
+      <div className="cal-range-tabs" role="tablist" aria-label="캘린더 기간">
+        {([["week", "주간"], ["fortnight", "2주간"], ["month", "월간"]] as const).map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={range === id} className={range === id ? "active" : ""} onClick={() => setRange(id)}>{label}</button>
+        ))}
+      </div>
+      <div className="calendar-nav">
+        <button type="button" onClick={() => shift(-1)} aria-label="이전 기간">←</button>
+        <b>{formatCalPeriodLabel(range, anchor)}</b>
+        <button type="button" onClick={() => shift(1)} aria-label="다음 기간">→</button>
+        {range === "fortnight" && (
+          <label className="calendar-period-field">기간 시작일
+            <input type="date" value={toIsoDate(anchor)} onChange={(e) => {
+              if (!e.target.value) return;
+              setAnchor(parseIsoDate(e.target.value));
+            }} />
+          </label>
+        )}
+        <button type="button" className="secondary today-btn" onClick={() => setAnchor(parseIsoDate(today))}>오늘</button>
+      </div>
+      <p className="muted cal-range-hint">
+        {range === "week" && "1주 단위로 표시하며, 하루에 더 많은 일정을 펼쳐 보여 줍니다."}
+        {range === "fortnight" && "2주 단위로 표시합니다. 기간 시작일을 지정해 보고 싶은 구간을 맞출 수 있습니다."}
+        {range === "month" && "월 단위 개요입니다. 일정이 많으면 날짜를 눌러 전체 목록을 확인하세요."}
+      </p>
+    </div>
+    <div className={`admin-calendar-pair ${range}`}>
+      <TravelCalendar kind="leave" title="휴가 캘린더" range={range} anchor={anchor} items={leaveItems} onSelectDay={onSelectDay} />
+      <TravelCalendar kind="travel" title="출장 캘린더" range={range} anchor={anchor} items={travelItems} onSelectDay={onSelectDay} />
+    </div>
+  </div>;
 }
 
 function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: Report[]; profile: Profile; session?: Session; onCreate?: () => void; onDeleted?: (id: string) => void }) {
@@ -255,6 +357,7 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
   const [pendingDelete, setPendingDelete] = useState<Report | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [listMessage, setListMessage] = useState("");
+  const [adminTab, setAdminTab] = useState<"calendar" | "list">("calendar");
   const departments = ["전체", ...Array.from(new Set(reports.map((r) => r.department)))];
   const filtered = reports.filter((r) => (department === "전체" || r.department === department) && (`${r.authorName} ${r.weekLabel} ${r.department}`.toLowerCase().includes(query.toLowerCase())));
   const totalPages = Math.max(1, Math.ceil(filtered.length / REPORTS_PAGE_SIZE));
@@ -283,8 +386,16 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
   if (profile.role === "admin") {
     return <div className="content admin-board">
       <SectionTitle title="Schedule" />
-      <div className="admin-board-grid">
-        <TravelCalendar reports={reports} compact onSelectDay={(date, items) => setDayTravel({ date, items })} />
+      <div className="subtabs" role="tablist" aria-label="Schedule 세부 탭">
+        <button type="button" role="tab" aria-selected={adminTab === "calendar"} className={adminTab === "calendar" ? "active" : ""} onClick={() => setAdminTab("calendar")}>캘린더</button>
+        <button type="button" role="tab" aria-selected={adminTab === "list"} className={adminTab === "list" ? "active" : ""} onClick={() => setAdminTab("list")}>전체 Schedule</button>
+      </div>
+
+      {adminTab === "calendar" && (
+        <AdminCalendarBoard reports={reports} onSelectDay={(date, items) => setDayTravel({ date, items })} />
+      )}
+
+      {adminTab === "list" && (
         <section className="panel admin-reports-panel">
           <div className="panel-head"><div><h3>전체 Schedule</h3></div><span className="result-count">{filtered.length}건</span></div>
           <div className="filters compact">
@@ -306,7 +417,8 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
             <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>→</button>
           </div>
         </section>
-      </div>
+      )}
+
       {selected && <ReportViewer report={selected} onClose={() => setSelected(null)} />}
       {dayTravel && <DayTravelViewer date={dayTravel.date} items={dayTravel.items} onClose={() => setDayTravel(null)} />}
       {pendingDelete && (
@@ -351,24 +463,27 @@ function formatDayLabel(date: string) {
 function DayTravelViewer({ date, items, onClose }: { date: string; items: DayTravelItem[]; onClose: () => void }) {
   const trips = items.filter((t) => !t.type.includes("휴가"));
   const leaves = items.filter((t) => t.type.includes("휴가"));
+  const onlyLeave = leaves.length > 0 && trips.length === 0;
+  const onlyTravel = trips.length > 0 && leaves.length === 0;
+  const heading = onlyLeave ? "휴가" : onlyTravel ? "출장" : "출장 · 휴가";
   const rows = items.map((t) => {
     const isLeave = t.type.includes("휴가");
     const period = t.end && t.end !== t.start ? `${t.start} ~ ${t.end}` : t.start;
     return [isLeave ? "휴가" : "출장", t.department, t.name, period, isLeave ? "-" : (t.destination || "-"), isLeave ? "-" : (t.purpose || "-")];
   });
   return <div className="report-view-backdrop" onMouseDown={onClose}>
-    <article className="report-view-modal day-travel-modal" role="dialog" aria-modal="true" aria-label="출장·휴가 목록" onMouseDown={(e) => e.stopPropagation()}>
+    <article className="report-view-modal day-travel-modal" role="dialog" aria-modal="true" aria-label={`${heading} 목록`} onMouseDown={(e) => e.stopPropagation()}>
       <button className="drawer-close" onClick={onClose}>×</button>
       <div className="paper-head">
-        <p>출장 · 휴가</p>
+        <p>{heading}</p>
         <div>
           <span><b>날짜</b> {formatDayLabel(date)}</span>
           <span><b>전체</b> {items.length}건</span>
-          <span><b>출장</b> {trips.length}건</span>
-          <span><b>휴가</b> {leaves.length}건</span>
+          {!onlyLeave && <span><b>출장</b> {trips.length}건</span>}
+          {!onlyTravel && <span><b>휴가</b> {leaves.length}건</span>}
         </div>
       </div>
-      <PaperSection no="01" title="해당일 출장·휴가 목록">
+      <PaperSection no="01" title={`해당일 ${heading} 목록`}>
         <MiniTable heads={["구분", "부서", "이름", "기간", "목적지", "목적"]} rows={rows} />
       </PaperSection>
     </article>
@@ -426,7 +541,7 @@ function recentWeekLabels(limit = 8) {
 function Users({ session, profile, reports }: { session: Session; profile: Profile; reports: Report[] }) {
   const [tab, setTab] = useState<"submissions" | "accounts">("submissions");
   const [users, setUsers] = useState<Profile[]>([]);
-  const [form, setForm] = useState({ department: "", name: "", employeeNumber: "", password: "", role: "leader" });
+  const [form, setForm] = useState({ department: "", name: "", employeeNumber: "", role: "leader" });
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pendingDelete, setPendingDelete] = useState<Profile | null>(null);
@@ -463,7 +578,7 @@ function Users({ session, profile, reports }: { session: Session; profile: Profi
       const result = await callFunction<{ user: Profile }>("createUserAccount", form, session.idToken);
       setUsers((v) => [result.user, ...v]);
       setOpen(false);
-      setForm({ department: "", name: "", employeeNumber: "", password: "", role: "leader" });
+      setForm({ department: "", name: "", employeeNumber: "", role: "leader" });
     } catch (err) { setMessage(err instanceof Error ? err.message : "계정을 만들지 못했습니다."); }
   }
 
@@ -567,7 +682,7 @@ function Users({ session, profile, reports }: { session: Session; profile: Profi
       </>
     )}
 
-    {open && <div className="modal-backdrop"><form className="modal" onSubmit={create}><button type="button" className="drawer-close" onClick={() => setOpen(false)}>×</button><h2>새 계정 만들기</h2><div className="modal-grid"><label>부서<input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="예: 기획팀" required /></label><label>이름<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="홍길동" required /></label><label>사번<input value={form.employeeNumber} onChange={(e) => setForm({ ...form, employeeNumber: e.target.value })} placeholder="예: LF24001" required /></label><label>최초 비밀번호<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={8} placeholder="8자 이상" required /></label><label>권한<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="leader">리더</option><option value="admin">관리자</option></select></label></div>{message && <div className="error-box">{message}</div>}<button className="primary wide">계정 발급하기</button></form></div>}
+    {open && <div className="modal-backdrop"><form className="modal" onSubmit={create}><button type="button" className="drawer-close" onClick={() => setOpen(false)}>×</button><h2>새 계정 만들기</h2><p className="muted" style={{ marginTop: 0 }}>최초 비밀번호는 <b>0000</b>으로 자동 설정됩니다. 첫 로그인 후 비밀번호를 변경해야 합니다.</p><div className="modal-grid"><label>부서<input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="예: 기획팀" required /></label><label>이름<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="홍길동" required /></label><label>사번<input value={form.employeeNumber} onChange={(e) => setForm({ ...form, employeeNumber: e.target.value })} placeholder="예: LF24001" required /></label><label>권한<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="leader">리더</option><option value="admin">관리자</option></select></label></div>{message && <div className="error-box">{message}</div>}<button className="primary wide">계정 발급하기</button></form></div>}
     {pendingDelete && <div className="modal-backdrop" onMouseDown={() => !deleting && setPendingDelete(null)}><div className="modal confirm-modal" onMouseDown={(e) => e.stopPropagation()}><h2>사용자 삭제</h2><p className="muted"><b>{pendingDelete.name}</b>({pendingDelete.employeeNumber}) 계정을 삭제할까요?<br />삭제 후 해당 계정으로 로그인할 수 없습니다.</p><div className="confirm-actions"><button type="button" className="secondary" disabled={deleting} onClick={() => setPendingDelete(null)}>취소</button><button type="button" className="danger" disabled={deleting} onClick={confirmDelete}>{deleting ? "삭제 중..." : "삭제"}</button></div></div></div>}
     {selectedReport && <ReportViewer report={selectedReport} onClose={() => setSelectedReport(null)} />}
   </div>;

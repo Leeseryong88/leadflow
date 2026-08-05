@@ -7,12 +7,12 @@ export async function POST(request: Request) {
   try {
     const caller = await requireAdmin(request);
     const body = await request.json();
-    const { department, name, employeeNumber, password, role = "leader" } = body;
-    if (![department, name, employeeNumber, password].every((value) => typeof value === "string" && value.trim())) {
-      return Response.json({ error: "부서, 이름, 사번, 최초 비밀번호를 모두 입력해 주세요." }, { status: 400 });
+    const { department, name, employeeNumber, role = "leader" } = body;
+    const password = "0000";
+    if (![department, name, employeeNumber].every((value) => typeof value === "string" && value.trim())) {
+      return Response.json({ error: "부서, 이름, 사번을 모두 입력해 주세요." }, { status: 400 });
     }
     if (!/^[a-zA-Z0-9_-]{2,30}$/.test(employeeNumber)) return Response.json({ error: "사번은 영문, 숫자, -, _ 만 사용할 수 있습니다." }, { status: 400 });
-    if (password.length < 8) return Response.json({ error: "최초 비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
     if (!["admin", "leader"].includes(role)) return Response.json({ error: "잘못된 권한입니다." }, { status: 400 });
 
     const authUser = await createFirebaseUser(employeeNumber, password);
