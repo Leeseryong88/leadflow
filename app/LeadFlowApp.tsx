@@ -389,7 +389,9 @@ function buildPrintCalendarBlock(kind: CalKind, title: string, range: CalRange, 
         : esc(`${s.item.name}${s.item.destination ? ` · ${s.item.destination}` : ""}`);
       return `<span class="p-bar ${kind}${s.continuesLeft ? " cont-l" : ""}${s.continuesRight ? " cont-r" : ""}" style="grid-column:${s.startCol + 1}/${s.endCol + 2};grid-row:${s.lane + 1}"><em>${kind === "leave" ? "휴가" : "출장"}</em><span>${label}</span></span>`;
     }).join("");
-    return `<div class="p-week" style="--lanes:${visibleLanes}"><div class="p-week-days">${daysFixed}</div><div class="p-week-bars" style="grid-template-rows:repeat(${visibleLanes},1fr)">${bars}</div></div>`;
+    // 인쇄 시 1fr로 두면 바가 주 행 전체를 채우므로 고정 높이(mm)로 쌓는다.
+    const barRow = range === "week" ? "5mm" : range === "fortnight" ? "4.2mm" : "3.6mm";
+    return `<div class="p-week" style="--lanes:${visibleLanes}"><div class="p-week-days">${daysFixed}</div><div class="p-week-bars" style="grid-template-rows:repeat(${visibleLanes},${barRow})">${bars}</div></div>`;
   }).join("");
 
   return `<section class="p-cal ${kind}">
@@ -431,11 +433,11 @@ function printCalendars(range: CalRange, anchor: Date, leaveItems: DayTravelItem
   .p-day>b{display:inline-grid;place-items:center;min-width:4mm;height:4mm;font:8px "DM Mono",monospace}
   .p-day.today>b{background:#1f5eff;color:#fff;border-radius:50%}
   .p-day small{position:absolute;top:1mm;right:1mm;font-size:7px;color:#7b8798}
-  .p-week-bars{position:absolute;top:5mm;left:0;right:0;bottom:1mm;display:grid;grid-template-columns:repeat(7,1fr);gap:0.6mm 0;padding:0 0.4mm;align-content:start}
-  .p-bar{display:flex;align-items:center;gap:1mm;min-width:0;margin:0 0.5mm;padding:0.4mm 1mm;border-radius:1px;overflow:hidden;font-size:7.5px;font-weight:600;line-height:1.15}
+  .p-week-bars{position:absolute;top:5.5mm;left:0;right:0;height:auto;display:grid;grid-template-columns:repeat(7,1fr);row-gap:0.8mm;column-gap:0;padding:0 0.5mm;align-content:start;align-items:start;pointer-events:none}
+  .p-bar{display:flex;align-items:center;align-self:start;gap:1mm;min-width:0;width:auto;height:100%;max-height:5.5mm;margin:0 0.6mm;padding:0 1.2mm;border-radius:1.2px;overflow:hidden;font-size:7.5px;font-weight:600;line-height:1;box-sizing:border-box}
   .p-bar.cont-l{margin-left:0;border-top-left-radius:0;border-bottom-left-radius:0}
   .p-bar.cont-r{margin-right:0;border-top-right-radius:0;border-bottom-right-radius:0}
-  .p-bar>em{font-style:normal;flex:0 0 auto;padding:0 1mm;border-radius:1px;font-size:6.5px;font-weight:800}
+  .p-bar>em{font-style:normal;flex:0 0 auto;padding:0.3mm 1mm;border-radius:1px;font-size:6.5px;font-weight:800;line-height:1}
   .p-bar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .p-bar.travel{background:#1f5eff;color:#fff}
   .p-bar.travel>em{background:rgba(255,255,255,.22)}
