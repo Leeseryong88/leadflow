@@ -37,6 +37,26 @@ export async function requireAdmin(request: Request): Promise<AdminSession> {
   }
 }
 
+/** 관리자 여부와 무관하게 활성 사용자면 통과. (양식 설정 조회 등 읽기 전용 용도) */
+export async function requireUser(request: Request): Promise<AdminSession> {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) throw new ApiError(401, "로그인이 필요합니다.");
+  try {
+    const user = await lookupFirebaseUser(token);
+    const profile = await getFirestoreDocument<ServerProfile>(`users/${user.localId}`, token);
+    const bootstrapUid = process.env.NEXT_PUBLIC_BOOTSTRAP_ADMIN_UID;
+    if (!profile && user.localId === bootstrapUid) {
+      return { uid: user.localId, department: "관리자", name: user.email?.split("@")[0] || "LeadFlow Admin", employeeNumber: user.email || "", role: "admin", mustChangePassword: false, active: true, token };
+    }
+    if (!profile?.active) throw new ApiError(401, "계정 상태를 확인해 주세요.");
+    return { ...profile, uid: user.localId, token };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error instanceof FirebaseRestError && error.status === 503) throw error;
+    throw new ApiError(401, "인증 정보를 다시 확인해 주세요.");
+  }
+}
+
 export function errorResponse(error: unknown) {
   if (error instanceof ApiError) return Response.json({ error: error.message }, { status: error.status });
   if (error instanceof FirebaseRestError) {

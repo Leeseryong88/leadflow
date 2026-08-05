@@ -1,5 +1,7 @@
 /* Firestore's REST wire format is intentionally dynamic at the decode boundary. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { FormConfig, mergeFormConfig } from "../lib/form-config";
+
 export type Session = { idToken: string; refreshToken: string; uid: string; expiresAt: number };
 export type Profile = {
   uid: string;
@@ -258,6 +260,22 @@ export async function deleteUserAccount(uid: string, token: string) {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
+}
+
+export async function fetchFormConfig(token: string): Promise<FormConfig> {
+  const data = await jsonRequest<{ config: unknown }>("/api/form-config", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return mergeFormConfig(data.config);
+}
+
+export async function saveFormConfig(config: FormConfig, token: string): Promise<FormConfig> {
+  const data = await jsonRequest<{ config: unknown }>("/api/form-config", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ config }),
+  });
+  return mergeFormConfig(data.config);
 }
 
 export async function deleteReport(id: string, token: string) {

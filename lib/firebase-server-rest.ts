@@ -99,6 +99,15 @@ export async function createFirestoreDocument(collection: string, id: string, da
   });
 }
 
+/** 문서가 없으면 생성, 있으면 덮어쓰기(upsert). */
+export async function setFirestoreDocument(path: string, data: Record<string, unknown>, token: string) {
+  return requestJson(`${firestoreBase}/${path}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, encode(value)])) }),
+  });
+}
+
 export async function deleteFirestoreDocument(path: string, token: string) {
   const response = await fetch(`${firestoreBase}/${path}`, {
     method: "DELETE",

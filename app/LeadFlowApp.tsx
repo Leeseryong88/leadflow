@@ -9,6 +9,8 @@ import {
   createDocument,
   deleteReport,
   deleteUserAccount,
+  fetchFormConfig,
+  saveFormConfig,
   firebaseReady,
   getOrBootstrapProfile,
   listDocuments,
@@ -22,6 +24,7 @@ import {
   signIn,
 } from "./firebase-rest";
 import { ReportWriter } from "./ReportWriter";
+import { DEFAULT_FORM_CONFIG, FormConfig } from "../lib/form-config";
 
 const PAGE_PATHS: Record<string, string> = {
   calendar: "/calendar",
@@ -30,6 +33,7 @@ const PAGE_PATHS: Record<string, string> = {
   users: "/users",
   collect: "/collect",
   ai: "/ai",
+  form: "/form",
 };
 
 function pageFromPath(pathname: string) {
@@ -38,6 +42,7 @@ function pageFromPath(pathname: string) {
   if (pathname.startsWith("/users")) return "users";
   if (pathname.startsWith("/collect")) return "collect";
   if (pathname.startsWith("/ai")) return "ai";
+  if (pathname.startsWith("/form")) return "form";
   return "reports";
 }
 
@@ -63,7 +68,7 @@ const emptyDraft = () => ({
   weekLabel: weekLabelFromReportDate(),
   travel: [] as Travel[], events: [] as EventItem[], issues: [] as Issue[], ceoRequests: "", keyQuestion: "",
 });
-const navAdmin = [["calendar", "캘린더"], ["reports", "전체 Schedule"], ["users", "사용자 관리"], ["collect", "데이터 취합"], ["ai", "Leader Schedule AI"]];
+const navAdmin = [["calendar", "캘린더"], ["reports", "전체 Schedule"], ["users", "사용자 관리"], ["collect", "데이터 취합"], ["ai", "Leader Schedule AI"], ["form", "양식 만들기"]];
 const navLeader = [["reports", "Schedule"]];
 const REPORTS_PAGE_SIZE = 8;
 
@@ -80,6 +85,9 @@ function NavIcon({ id }: { id: string }) {
   }
   if (id === "collect") {
     return <svg {...common}><path d="M4 7l8-3 8 3-8 3-8-3z"/><path d="M4 12l8 3 8-3"/><path d="M4 17l8 3 8-3"/></svg>;
+  }
+  if (id === "form") {
+    return <svg {...common}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
   }
   return <svg {...common}><path d="M12 3l1.6 4.8L18.5 9l-4.2 3 1.3 5L12 14.4 8.4 17l1.3-5L5.5 9l4.9-1.2L12 3z"/></svg>;
 }
@@ -1472,6 +1480,151 @@ function AskChatbot({session}:{session:Session}){
   </div>;
 }
 
+function OptionListEditor({ label, hint, options, onChange }: { label: string; hint?: string; options: string[]; onChange: (next: string[]) => void }) {
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= options.length) return;
+    const next = [...options];
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+  return <div className="option-editor">
+    <div className="option-editor-head"><span className="field-label">{label}</span>{hint && <small>{hint}</small>}</div>
+    {options.map((option, index) => <div className="option-row" key={index}>
+      <span className="option-num">{index + 1}</span>
+      <input value={option} onChange={(e) => onChange(options.map((item, i) => i === index ? e.target.value : item))} placeholder="옵션 이름" aria-label={`${label} ${index + 1}`} />
+      <button type="button" className="option-btn" onClick={() => move(index, -1)} disabled={index === 0} aria-label="위로 이동">↑</button>
+      <button type="button" className="option-btn" onClick={() => move(index, 1)} disabled={index === options.length - 1} aria-label="아래로 이동">↓</button>
+      <button type="button" className="option-btn danger" onClick={() => onChange(options.filter((_, i) => i !== index))} disabled={options.length <= 1} aria-label="옵션 삭제">×</button>
+    </div>)}
+    <button type="button" className="add-row option-add" onClick={() => onChange([...options, ""])}>+ 옵션 추가</button>
+  </div>;
+}
+
+function BuilderSection({ no, name, children }: { no: string; name: string; children: React.ReactNode }) {
+  return <section className="panel builder-section">
+    <div className="builder-section-head"><span>{no}</span><h3>{name}</h3></div>
+    {children}
+  </section>;
+}
+
+function FormBuilderPage({ session }: { session: Session }) {
+  const [config, setConfig] = useState<FormConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFormConfig(session.idToken)
+      .then((loaded) => { if (!cancelled) setConfig(loaded); })
+      .catch(() => {
+        if (cancelled) return;
+        setConfig(JSON.parse(JSON.stringify(DEFAULT_FORM_CONFIG)));
+        setError("저장된 양식을 불러오지 못해 기본 양식을 표시합니다.");
+      });
+    return () => { cancelled = true; };
+  }, [session.idToken]);
+
+  const patch = <K extends keyof FormConfig>(section: K, values: Partial<FormConfig[K]>) =>
+    setConfig((current) => current ? { ...current, [section]: { ...current[section], ...values } } : current);
+
+  async function save() {
+    if (!config) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const saved = await saveFormConfig(config, session.idToken);
+      setConfig(saved);
+      setNotice("양식이 저장되었습니다. 사용자가 새 Schedule을 작성할 때 바로 적용됩니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "양식을 저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetToDefault() {
+    setConfig(JSON.parse(JSON.stringify(DEFAULT_FORM_CONFIG)));
+    setError("");
+    setNotice("기본 양식을 불러왔습니다. 저장 버튼을 눌러야 적용됩니다.");
+  }
+
+  if (!config) return <div className="content"><SectionTitle eyebrow="FORM BUILDER" title="양식 만들기" description="양식을 불러오는 중입니다..." /></div>;
+
+  return <div className="content form-builder">
+    <SectionTitle
+      eyebrow="FORM BUILDER"
+      title="양식 만들기"
+      description="사용자가 제출하는 Schedule 작성 양식을 수정합니다. 섹션 제목, 드롭다운 목록, 예시 문구를 바꾸고 저장하면 즉시 반영됩니다."
+      action={<div className="builder-actions">
+        <button type="button" className="secondary" onClick={resetToDefault}>기본값 복원</button>
+        <button type="button" className="primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "양식 저장"}</button>
+      </div>}
+    />
+    {error && <div className="error-box" style={{ marginBottom: 14 }}>{error}</div>}
+    {notice && <div className="success-box" style={{ marginBottom: 14 }}>{notice}</div>}
+
+    <BuilderSection no="01" name="출장 및 휴가">
+      <div className="builder-grid">
+        <label>섹션 제목<input value={config.travel.title} onChange={(e) => patch("travel", { title: e.target.value })} /></label>
+        <label>부제목<input value={config.travel.subtitle} onChange={(e) => patch("travel", { subtitle: e.target.value })} /></label>
+        <label>목적지 예시 문구<input value={config.travel.destinationPlaceholder} onChange={(e) => patch("travel", { destinationPlaceholder: e.target.value })} /></label>
+        <label>출장목적 예시 문구<input value={config.travel.purposePlaceholder} onChange={(e) => patch("travel", { purposePlaceholder: e.target.value })} /></label>
+      </div>
+    </BuilderSection>
+
+    <BuilderSection no="02" name="부서의 주요 일정">
+      <div className="builder-grid">
+        <label>섹션 제목<input value={config.events.title} onChange={(e) => patch("events", { title: e.target.value })} /></label>
+        <label>부제목<input value={config.events.subtitle} onChange={(e) => patch("events", { subtitle: e.target.value })} /></label>
+        <label>일정 설명 예시 문구<input value={config.events.descriptionPlaceholder} onChange={(e) => patch("events", { descriptionPlaceholder: e.target.value })} /></label>
+        <label>직접 입력 예시 문구<input value={config.events.directInputPlaceholder} onChange={(e) => patch("events", { directInputPlaceholder: e.target.value })} /></label>
+      </div>
+      <OptionListEditor
+        label="유형 드롭다운 목록"
+        hint="'- 선택 -'과 '직접 입력'은 항상 맨 위에 고정됩니다."
+        options={config.events.typeOptions}
+        onChange={(next) => patch("events", { typeOptions: next })}
+      />
+    </BuilderSection>
+
+    <BuilderSection no="03" name="부서의 핵심 이슈">
+      <div className="builder-grid">
+        <label>섹션 제목<input value={config.issues.title} onChange={(e) => patch("issues", { title: e.target.value })} /></label>
+        <label>부제목<input value={config.issues.subtitle} onChange={(e) => patch("issues", { subtitle: e.target.value })} /></label>
+        <label>상세 내용 예시 문구<input value={config.issues.detailsPlaceholder} onChange={(e) => patch("issues", { detailsPlaceholder: e.target.value })} /></label>
+        <label>일정·마감 예시 문구<input value={config.issues.deadlinePlaceholder} onChange={(e) => patch("issues", { deadlinePlaceholder: e.target.value })} /></label>
+      </div>
+      <OptionListEditor
+        label="카테고리 드롭다운 목록"
+        hint="첫 번째 옵션이 기본 선택값이 됩니다."
+        options={config.issues.categoryOptions}
+        onChange={(next) => patch("issues", { categoryOptions: next })}
+      />
+    </BuilderSection>
+
+    <BuilderSection no="04" name="CEO 요청사항">
+      <div className="builder-grid">
+        <label>섹션 제목<input value={config.ceo.title} onChange={(e) => patch("ceo", { title: e.target.value })} /></label>
+        <label>부제목<input value={config.ceo.subtitle} onChange={(e) => patch("ceo", { subtitle: e.target.value })} /></label>
+        <label className="builder-wide">내용 예시 문구<textarea value={config.ceo.placeholder} onChange={(e) => patch("ceo", { placeholder: e.target.value })} rows={2} /></label>
+      </div>
+    </BuilderSection>
+
+    <BuilderSection no="05" name="Key Question">
+      <div className="builder-grid">
+        <label>섹션 제목<input value={config.keyQuestion.title} onChange={(e) => patch("keyQuestion", { title: e.target.value })} /></label>
+        <label>부제목<input value={config.keyQuestion.subtitle} onChange={(e) => patch("keyQuestion", { subtitle: e.target.value })} /></label>
+        <label className="builder-wide">내용 예시 문구<textarea value={config.keyQuestion.placeholder} onChange={(e) => patch("keyQuestion", { placeholder: e.target.value })} rows={2} /></label>
+      </div>
+    </BuilderSection>
+
+    <div className="builder-footer">
+      <button type="button" className="primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "양식 저장"}</button>
+    </div>
+  </div>;
+}
+
 export function LeadFlowApp(){
   const pathname = usePathname();
   const router = useRouter();
@@ -1498,7 +1651,7 @@ export function LeadFlowApp(){
   },[session,profile]);
   useEffect(()=>{
     if(!profile)return;
-    if(profile.role!=="admin"&&(page==="users"||page==="ai"||page==="calendar"||page==="collect"))router.replace("/reports");
+    if(profile.role!=="admin"&&(page==="users"||page==="ai"||page==="calendar"||page==="collect"||page==="form"))router.replace("/reports");
     if(profile.role==="admin"&&page==="write")router.replace("/reports");
   },[profile,page,router]);
   if(loading)return <div className="loading-screen"><span className="brand-mark">L</span><p>Leader Schedule을 열고 있습니다</p></div>;
@@ -1508,7 +1661,7 @@ export function LeadFlowApp(){
   const logout=()=>{clearSession();setSession(null);setProfile(null);router.replace("/reports")};
   const openReportWriter=()=>router.push("/reports/write");
   const closeReportWriter=()=>router.push("/reports");
-  const body=page==="write"?<div className="content writer-page"><ReportWriter session={session} profile={profile} onClose={closeReportWriter} onSaved={report=>{setReports(current=>[report,...current]);router.push("/reports")}}/></div>:page==="calendar"?<AdminCalendarPage reports={reports}/>:page==="reports"?<Reports reports={reports} profile={profile} session={session} onCreate={profile.role!=="admin"?openReportWriter:undefined} onDeleted={(id)=>setReports((current)=>current.filter((report)=>report.id!==id))}/>:page==="users"?<Users session={session} profile={profile} reports={reports}/>:page==="collect"?<DataCollectPage session={session} reports={reports}/>:page==="ai"?<AIWorkspace session={session}/>:null;
+  const body=page==="write"?<div className="content writer-page"><ReportWriter session={session} profile={profile} onClose={closeReportWriter} onSaved={report=>{setReports(current=>[report,...current]);router.push("/reports")}}/></div>:page==="calendar"?<AdminCalendarPage reports={reports}/>:page==="reports"?<Reports reports={reports} profile={profile} session={session} onCreate={profile.role!=="admin"?openReportWriter:undefined} onDeleted={(id)=>setReports((current)=>current.filter((report)=>report.id!==id))}/>:page==="users"?<Users session={session} profile={profile} reports={reports}/>:page==="collect"?<DataCollectPage session={session} reports={reports}/>:page==="ai"?<AIWorkspace session={session}/>:page==="form"?<FormBuilderPage session={session}/>:null;
   return <div className="app-shell">
     <Sidebar profile={profile} page={page==="write"?"reports":page} setPage={setPage}/>
     <div className="main"><Header profile={profile} onLogout={logout}/>{body}</div>

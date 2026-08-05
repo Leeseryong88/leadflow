@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { createDocument, Profile, Session } from "./firebase-rest";
+import { FormEvent, useEffect, useState } from "react";
+import { createDocument, fetchFormConfig, Profile, Session } from "./firebase-rest";
+import { DEFAULT_FORM_CONFIG, FormConfig } from "../lib/form-config";
 
 type Travel = { type: string; name: string; start: string; end: string; destination: string; purpose: string; notes: string };
 type EventItem = { date: string; type: string; description: string; location: string; notes: string };
@@ -40,6 +41,7 @@ function SurveyHeader({ no, title, subtitle }: { no: string; title: string; subt
 
 export function ReportWriter({ session, profile, onSaved, onClose }: { session: Session; profile: Profile; onSaved: (report: Report) => void; onClose: () => void }) {
   const [draft, setDraft] = useState(() => createDraft());
+  const [formConfig, setFormConfig] = useState<FormConfig>(DEFAULT_FORM_CONFIG);
   const [weekDate, setWeekDate] = useState(today);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -47,6 +49,24 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
   const [showKeyQuestion, setShowKeyQuestion] = useState(false);
   const [pickingTravelType, setPickingTravelType] = useState(false);
   const update = (key: string, value: unknown) => setDraft((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFormConfig(session.idToken)
+      .then((config) => {
+        if (cancelled) return;
+        setFormConfig(config);
+        // 저장된 옵션 목록에 없는 카테고리는 첫 옵션으로 정리
+        setDraft((current) => ({
+          ...current,
+          issues: current.issues.map((row) =>
+            config.issues.categoryOptions.includes(row.category) ? row : { ...row, category: config.issues.categoryOptions[0] },
+          ),
+        }));
+      })
+      .catch(() => { /* 설정 조회 실패 시 기본 양식 사용 */ });
+    return () => { cancelled = true; };
+  }, [session.idToken]);
 
   function rowUpdate<T extends Record<string, string>>(key: "travel" | "events" | "issues", index: number, field: keyof T, value: string) {
     const rows = [...(draft[key] as unknown as T[])];
@@ -133,7 +153,7 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
 
     <form className="survey-form report-compose-body" onSubmit={submit}>
       <section className="survey-section">
-        <SurveyHeader no="01" title="출장 및 휴가" subtitle="Travel & Time Off" />
+        <SurveyHeader no="01" title={formConfig.travel.title} subtitle={formConfig.travel.subtitle} />
         {draft.travel.map((row, index) => {
           const isLeave = row.type.includes("휴가");
           return <div className={`entry-grid ${isLeave ? "three" : "five"}${index > 0 ? " entry-follow" : ""}`} key={index}>
@@ -141,8 +161,8 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
             <label><span className="field-label">시작일</span><input type="date" value={row.start} onChange={(event) => rowUpdate<Travel>("travel", index, "start", event.target.value)} aria-label="시작일" /></label>
             <label><span className="field-label">종료일</span><input type="date" value={row.end} onChange={(event) => rowUpdate<Travel>("travel", index, "end", event.target.value)} aria-label="종료일" /></label>
             {!isLeave && <>
-              <label><span className="field-label">목적지</span><input value={row.destination} onChange={(event) => rowUpdate<Travel>("travel", index, "destination", event.target.value)} placeholder="도시/장소" aria-label="목적지" /></label>
-              <label><span className="field-label">출장목적</span><input value={row.purpose} onChange={(event) => rowUpdate<Travel>("travel", index, "purpose", event.target.value)} placeholder="출장 목적" aria-label="출장목적" /></label>
+              <label><span className="field-label">목적지</span><input value={row.destination} onChange={(event) => rowUpdate<Travel>("travel", index, "destination", event.target.value)} placeholder={formConfig.travel.destinationPlaceholder} aria-label="목적지" /></label>
+              <label><span className="field-label">출장목적</span><input value={row.purpose} onChange={(event) => rowUpdate<Travel>("travel", index, "purpose", event.target.value)} placeholder={formConfig.travel.purposePlaceholder} aria-label="출장목적" /></label>
             </>}
             <button type="button" className="remove" aria-label="출장·휴가 행 삭제" onClick={() => update("travel", draft.travel.filter((_, rowIndex) => rowIndex !== index))}>×</button>
           </div>;
@@ -163,11 +183,11 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
       </section>
 
       <section className="survey-section">
-        <SurveyHeader no="02" title="부서의 주요 일정" subtitle="Key Dates & Events" />
+        <SurveyHeader no="02" title={formConfig.events.title} subtitle={formConfig.events.subtitle} />
         {draft.events.map((row, index) => <div className={`entry-grid four${index > 0 ? " entry-follow" : ""}`} key={index}>
           <label><span className="field-label">날짜</span><input type="date" value={row.date} onChange={(event) => rowUpdate<EventItem>("events", index, "date", event.target.value)} aria-label="날짜" /></label>
-          <label><span className="field-label">유형</span><select value={row.type.startsWith(DIRECT_EVENT_TYPE) ? DIRECT_EVENT_TYPE : row.type} onChange={(event) => rowUpdate<EventItem>("events", index, "type", event.target.value)} aria-label="유형"><option value="">- 선택 -</option><option value={DIRECT_EVENT_TYPE}>직접 입력</option><option value="대표님 회의">대표님 회의</option><option value="부서 회의">부서 회의</option><option value="워크샵">워크샵</option><option value="행사">행사</option><option value="Store Open">Store Open</option><option value="촬영">촬영</option><option value="계약">계약</option><option value="제품 출시">제품 출시</option><option value="공사">공사</option></select>{row.type.startsWith(DIRECT_EVENT_TYPE)&&<input value={row.type.slice(DIRECT_EVENT_TYPE.length)} onChange={(event) => rowUpdate<EventItem>("events", index, "type", `${DIRECT_EVENT_TYPE}${event.target.value}`)} placeholder="유형을 입력하세요" aria-label="일정 유형 직접 입력" autoFocus/>}</label>
-          <label><span className="field-label">일정 설명</span><input value={row.description} onChange={(event) => rowUpdate<EventItem>("events", index, "description", event.target.value)} placeholder="핵심 일정" aria-label="일정 설명" /></label>
+          <label><span className="field-label">유형</span><select value={row.type.startsWith(DIRECT_EVENT_TYPE) ? DIRECT_EVENT_TYPE : row.type} onChange={(event) => rowUpdate<EventItem>("events", index, "type", event.target.value)} aria-label="유형"><option value="">- 선택 -</option><option value={DIRECT_EVENT_TYPE}>직접 입력</option>{formConfig.events.typeOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select>{row.type.startsWith(DIRECT_EVENT_TYPE)&&<input value={row.type.slice(DIRECT_EVENT_TYPE.length)} onChange={(event) => rowUpdate<EventItem>("events", index, "type", `${DIRECT_EVENT_TYPE}${event.target.value}`)} placeholder={formConfig.events.directInputPlaceholder} aria-label="일정 유형 직접 입력" autoFocus/>}</label>
+          <label><span className="field-label">일정 설명</span><input value={row.description} onChange={(event) => rowUpdate<EventItem>("events", index, "description", event.target.value)} placeholder={formConfig.events.descriptionPlaceholder} aria-label="일정 설명" /></label>
           <label><span className="field-label">장소</span><input value={row.location} onChange={(event) => rowUpdate<EventItem>("events", index, "location", event.target.value)} aria-label="장소" /></label>
           <button type="button" className="remove" aria-label="주요 일정 행 삭제" onClick={() => update("events", draft.events.filter((_, rowIndex) => rowIndex !== index))}>×</button>
         </div>)}
@@ -175,37 +195,37 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
       </section>
 
       <section className="survey-section">
-        <SurveyHeader no="03" title="부서의 핵심 이슈" subtitle="Key Issues & Asks" />
+        <SurveyHeader no="03" title={formConfig.issues.title} subtitle={formConfig.issues.subtitle} />
         {draft.issues.map((row, index) => <div className={`entry-grid three${index > 0 ? " entry-follow" : ""}`} key={index}>
-          <label><span className="field-label">카테고리</span><select value={row.category} onChange={(event) => rowUpdate<Issue>("issues", index, "category", event.target.value)} aria-label="카테고리"><option>핵심이슈</option><option>과제</option><option>의사결정</option><option>리스크</option></select></label>
-          <label><span className="field-label">상세 내용</span><input value={row.details} onChange={(event) => rowUpdate<Issue>("issues", index, "details", event.target.value)} placeholder="배경과 필요한 액션을 명확히 작성" aria-label="상세 내용" /></label>
-          <label><span className="field-label">일정·마감</span><input value={row.deadline} onChange={(event) => rowUpdate<Issue>("issues", index, "deadline", event.target.value)} placeholder="예: 8월 말" aria-label="일정·마감" /></label>
+          <label><span className="field-label">카테고리</span><select value={row.category} onChange={(event) => rowUpdate<Issue>("issues", index, "category", event.target.value)} aria-label="카테고리">{formConfig.issues.categoryOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+          <label><span className="field-label">상세 내용</span><input value={row.details} onChange={(event) => rowUpdate<Issue>("issues", index, "details", event.target.value)} placeholder={formConfig.issues.detailsPlaceholder} aria-label="상세 내용" /></label>
+          <label><span className="field-label">일정·마감</span><input value={row.deadline} onChange={(event) => rowUpdate<Issue>("issues", index, "deadline", event.target.value)} placeholder={formConfig.issues.deadlinePlaceholder} aria-label="일정·마감" /></label>
           <button type="button" className="remove" aria-label="핵심 이슈 행 삭제" onClick={() => update("issues", draft.issues.filter((_, rowIndex) => rowIndex !== index))}>×</button>
         </div>)}
-        <button type="button" className="add-row" onClick={() => update("issues", [...draft.issues, { category: "핵심이슈", details: "", deadline: "" }])}>+ 핵심 이슈 추가</button>
+        <button type="button" className="add-row" onClick={() => update("issues", [...draft.issues, { category: formConfig.issues.categoryOptions[0], details: "", deadline: "" }])}>+ 핵심 이슈 추가</button>
       </section>
 
       <section className="survey-section">
-        <SurveyHeader no="04" title="CEO 요청사항" subtitle="결정·협조 요청" />
+        <SurveyHeader no="04" title={formConfig.ceo.title} subtitle={formConfig.ceo.subtitle} />
         {showCeoRequests ? (
           <div className="large-field optional-field">
-            <label>CEO 요청사항<textarea value={draft.ceoRequests} onChange={(event) => update("ceoRequests", event.target.value)} placeholder="대표님의 확인, 결정, 지원이 필요한 사항" /></label>
+            <label>{formConfig.ceo.title}<textarea value={draft.ceoRequests} onChange={(event) => update("ceoRequests", event.target.value)} placeholder={formConfig.ceo.placeholder} /></label>
             <button type="button" className="remove-optional" onClick={() => { update("ceoRequests", ""); setShowCeoRequests(false); }}>작성 취소</button>
           </div>
         ) : (
-          <button type="button" className="add-row" onClick={() => setShowCeoRequests(true)}>+ CEO 요청사항 작성</button>
+          <button type="button" className="add-row" onClick={() => setShowCeoRequests(true)}>+ {formConfig.ceo.title} 작성</button>
         )}
       </section>
 
       <section className="survey-section">
-        <SurveyHeader no="05" title="Key Question" subtitle="핵심 질문" />
+        <SurveyHeader no="05" title={formConfig.keyQuestion.title} subtitle={formConfig.keyQuestion.subtitle} />
         {showKeyQuestion ? (
           <div className="large-field optional-field">
-            <label>Key Question<textarea value={draft.keyQuestion} onChange={(event) => update("keyQuestion", event.target.value)} placeholder="부서장이 하고있는 가장 중요한 질문 (한 주에만 해당되는 것은 아님)" /></label>
+            <label>{formConfig.keyQuestion.title}<textarea value={draft.keyQuestion} onChange={(event) => update("keyQuestion", event.target.value)} placeholder={formConfig.keyQuestion.placeholder} /></label>
             <button type="button" className="remove-optional" onClick={() => { update("keyQuestion", ""); setShowKeyQuestion(false); }}>작성 취소</button>
           </div>
         ) : (
-          <button type="button" className="add-row" onClick={() => setShowKeyQuestion(true)}>+ Key Question 작성</button>
+          <button type="button" className="add-row" onClick={() => setShowKeyQuestion(true)}>+ {formConfig.keyQuestion.title} 작성</button>
         )}
       </section>
 
