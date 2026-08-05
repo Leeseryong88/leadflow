@@ -63,8 +63,8 @@ const emptyDraft = () => ({
   weekLabel: weekLabelFromReportDate(),
   travel: [] as Travel[], events: [] as EventItem[], issues: [] as Issue[], ceoRequests: "", keyQuestion: "",
 });
-const navAdmin = [["calendar", "캘린더", "▦"], ["reports", "전체 Schedule", "▤"], ["users", "사용자 관리", "◎"], ["collect", "데이터 취합", "▥"], ["ai", "Leader Schedule AI", "✦"]];
-const navLeader = [["reports", "Schedule", "▤"]];
+const navAdmin = [["calendar", "캘린더", "📅"], ["reports", "전체 Schedule", "📋"], ["users", "사용자 관리", "👥"], ["collect", "데이터 취합", "🗂️"], ["ai", "Leader Schedule AI", "✦"]];
+const navLeader = [["reports", "Schedule", "📋"]];
 const REPORTS_PAGE_SIZE = 8;
 
 function fmtDate(value: string) {
@@ -309,6 +309,148 @@ function TravelCalendar({
   </section>;
 }
 
+/** 인쇄용: 한 주 안에서 연속 바 구간을 계산한다. */
+function printWeekSegments(week: (string | null)[], items: DayTravelItem[]) {
+  const segments: { item: DayTravelItem; startCol: number; endCol: number; continuesLeft: boolean; continuesRight: boolean; lane: number }[] = [];
+  const pending: Omit<typeof segments[number], "lane">[] = [];
+  for (const item of items) {
+    let startCol = -1, endCol = -1;
+    week.forEach((date, col) => {
+      if (!date) return;
+      if (item.start <= date && item.end >= date) {
+        if (startCol === -1) startCol = col;
+        endCol = col;
+      }
+    });
+    if (startCol === -1) continue;
+    pending.push({
+      item,
+      startCol,
+      endCol,
+      continuesLeft: item.start < (week[startCol] as string),
+      continuesRight: item.end > (week[endCol] as string),
+    });
+  }
+  pending.sort((a, b) => a.startCol - b.startCol || (b.endCol - b.startCol) - (a.endCol - a.startCol));
+  const laneEnds: number[] = [];
+  for (const segment of pending) {
+    let lane = laneEnds.findIndex((end) => end < segment.startCol);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(segment.endCol); }
+    else laneEnds[lane] = segment.endCol;
+    segments.push({ ...segment, lane });
+  }
+  return segments;
+}
+
+function buildPrintCalendarBlock(kind: CalKind, title: string, range: CalRange, anchor: Date, items: DayTravelItem[]) {
+  const weeks = buildCalendarWeeks(range, anchor);
+  const laneLimit = range === "week" ? 12 : range === "fortnight" ? 8 : 3;
+  const esc = escapePrintText;
+  const weekHtml = weeks.map((week) => {
+    const segments = printWeekSegments(week, items);
+    const visibleLanes = Math.min(laneLimit, Math.max(1, ...segments.map((s) => s.lane + 1), 1));
+    const visible = segments.filter((s) => s.lane < laneLimit);
+    const daysFixed = week.map((date, col) => {
+      if (!date) return `<div class="p-day empty"></div>`;
+      const dayNum = Number(date.slice(8, 10));
+      const hidden = segments.filter((s) => s.lane >= laneLimit && s.startCol <= col && s.endCol >= col).length;
+      return `<div class="p-day${date === today ? " today" : ""}"><b>${dayNum}</b>${hidden > 0 ? `<small>+${hidden}</small>` : ""}</div>`;
+    }).join("");
+    const bars = visible.map((s) => {
+      const label = kind === "leave"
+        ? esc(s.item.name)
+        : esc(`${s.item.name}${s.item.destination ? ` · ${s.item.destination}` : ""}`);
+      return `<span class="p-bar ${kind}${s.continuesLeft ? " cont-l" : ""}${s.continuesRight ? " cont-r" : ""}" style="grid-column:${s.startCol + 1}/${s.endCol + 2};grid-row:${s.lane + 1}"><em>${kind === "leave" ? "휴가" : "출장"}</em><span>${label}</span></span>`;
+    }).join("");
+    return `<div class="p-week" style="--lanes:${visibleLanes}"><div class="p-week-days">${daysFixed}</div><div class="p-week-bars" style="grid-template-rows:repeat(${visibleLanes},1fr)">${bars}</div></div>`;
+  }).join("");
+
+  return `<section class="p-cal ${kind}">
+    <header><p>${esc(title)}</p><h2>${esc(formatCalPeriodLabel(range, anchor))}</h2></header>
+    <div class="p-weekdays">${["일", "월", "화", "수", "목", "금", "토"].map((d) => `<span>${d}</span>`).join("")}</div>
+    <div class="p-grid">${weekHtml}</div>
+  </section>`;
+}
+
+function printCalendars(range: CalRange, anchor: Date, leaveItems: DayTravelItem[], travelItems: DayTravelItem[]) {
+  if (typeof document === "undefined") return;
+  const period = formatCalPeriodLabel(range, anchor);
+  const rangeLabel = range === "week" ? "주간" : range === "fortnight" ? "2주간" : "월간";
+  const title = `캘린더 인쇄 · ${rangeLabel} · ${period}`;
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><title>${escapePrintText(title)}</title>
+<style>
+  @page{size:A4 portrait;margin:8mm}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff;color:#111f39;font:11px/1.35 "Noto Sans KR",Manrope,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .sheet{width:100%;height:281mm;display:flex;flex-direction:column;gap:3mm;overflow:hidden}
+  .sheet-head{display:flex;align-items:baseline;justify-content:space-between;padding-bottom:2mm;border-bottom:1.5px solid #1f5eff;flex:0 0 auto}
+  .sheet-head h1{margin:0;font-size:14px;letter-spacing:-.02em}
+  .sheet-head span{font:500 10px "DM Mono",monospace;color:#6d7788}
+  .p-cal{flex:1 1 0;min-height:0;display:flex;flex-direction:column;border:1px solid #d7deea;padding:2.5mm;overflow:hidden}
+  .p-cal.leave{box-shadow:inset 2.5mm 0 0 #d89b15}
+  .p-cal.travel{box-shadow:inset 2.5mm 0 0 #1f5eff}
+  .p-cal header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:1.5mm;flex:0 0 auto}
+  .p-cal header p{margin:0;font:700 9px "DM Mono",monospace;letter-spacing:.08em;color:#6d7788}
+  .p-cal.leave header p{color:#846116}
+  .p-cal.travel header p{color:#1f5eff}
+  .p-cal header h2{margin:0;font:500 12px "DM Mono",monospace}
+  .p-weekdays{display:grid;grid-template-columns:repeat(7,1fr);flex:0 0 auto}
+  .p-weekdays span{text-align:center;padding:1mm 0;color:#8993a3;font:8px "DM Mono",monospace}
+  .p-grid{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border-top:1px solid #d7deea;border-left:1px solid #d7deea}
+  .p-week{position:relative;flex:1 1 0;min-height:0}
+  .p-week-days{display:grid;grid-template-columns:repeat(7,1fr);height:100%}
+  .p-day{border-right:1px solid #d7deea;border-bottom:1px solid #d7deea;padding:1mm;position:relative;overflow:hidden}
+  .p-day.empty{background:#fafbfd}
+  .p-day>b{display:inline-grid;place-items:center;min-width:4mm;height:4mm;font:8px "DM Mono",monospace}
+  .p-day.today>b{background:#1f5eff;color:#fff;border-radius:50%}
+  .p-day small{position:absolute;top:1mm;right:1mm;font-size:7px;color:#7b8798}
+  .p-week-bars{position:absolute;top:5mm;left:0;right:0;bottom:1mm;display:grid;grid-template-columns:repeat(7,1fr);gap:0.6mm 0;padding:0 0.4mm;align-content:start}
+  .p-bar{display:flex;align-items:center;gap:1mm;min-width:0;margin:0 0.5mm;padding:0.4mm 1mm;border-radius:1px;overflow:hidden;font-size:7.5px;font-weight:600;line-height:1.15}
+  .p-bar.cont-l{margin-left:0;border-top-left-radius:0;border-bottom-left-radius:0}
+  .p-bar.cont-r{margin-right:0;border-top-right-radius:0;border-bottom-right-radius:0}
+  .p-bar>em{font-style:normal;flex:0 0 auto;padding:0 1mm;border-radius:1px;font-size:6.5px;font-weight:800}
+  .p-bar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .p-bar.travel{background:#1f5eff;color:#fff}
+  .p-bar.travel>em{background:rgba(255,255,255,.22)}
+  .p-bar.leave{background:#fff4d6;color:#846116;border:0.3mm solid #e5c77a}
+  .p-bar.leave>em{background:#f0d48a;color:#6f5610}
+</style></head><body>
+<div class="sheet">
+  <div class="sheet-head"><h1>Leader Schedule 캘린더</h1><span>${escapePrintText(rangeLabel)} · ${escapePrintText(period)}</span></div>
+  ${buildPrintCalendarBlock("leave", "휴가 캘린더", range, anchor, leaveItems)}
+  ${buildPrintCalendarBlock("travel", "출장 캘린더", range, anchor, travelItems)}
+</div>
+</body></html>`;
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", "calendar-print-frame");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;opacity:0;pointer-events:none;z-index:-1;";
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  const win = iframe.contentWindow;
+  if (!doc || !win) { iframe.remove(); return; }
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    win.removeEventListener("afterprint", cleanup);
+    iframe.remove();
+  };
+  const triggerPrint = () => {
+    try { win.focus(); win.print(); }
+    catch { cleanup(); return; }
+    window.setTimeout(cleanup, 60_000);
+  };
+  win.addEventListener("afterprint", cleanup);
+  if (doc.readyState === "complete") window.setTimeout(triggerPrint, 50);
+  else iframe.onload = () => window.setTimeout(triggerPrint, 50);
+}
+
 function AdminCalendarBoard({ reports, onSelectDay }: { reports: Report[]; onSelectDay: (date: string, items: DayTravelItem[]) => void }) {
   const [range, setRange] = useState<CalRange>("week");
   const [anchor, setAnchor] = useState(() => parseIsoDate(today));
@@ -340,6 +482,7 @@ function AdminCalendarBoard({ reports, onSelectDay }: { reports: Report[]; onSel
           </label>
         )}
         <button type="button" className="secondary today-btn" onClick={() => setAnchor(parseIsoDate(today))}>오늘</button>
+        <button type="button" className="primary print-cal-btn" onClick={() => printCalendars(range, anchor, leaveItems, travelItems)}>인쇄하기</button>
       </div>
       <p className="muted cal-range-hint">
         {range === "week" && "1주 단위로 표시하며, 하루에 더 많은 일정을 펼쳐 보여 줍니다."}
