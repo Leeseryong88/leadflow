@@ -24,6 +24,7 @@ import {
   signIn,
 } from "./firebase-rest";
 import { ReportWriter } from "./ReportWriter";
+import { FormPreview } from "./FormPreview";
 import { DEFAULT_FORM_CONFIG, FormConfig } from "../lib/form-config";
 
 const PAGE_PATHS: Record<string, string> = {
@@ -1461,11 +1462,11 @@ function AskChatbot({session}:{session:Session}){
   return <div className={`ask-fab${open?" open":""}`}>
     {open&&<div className="ask-fab-panel" role="dialog" aria-label="Leader Schedule 질문">
       <div className="ask-fab-head">
-        <div><b>Leader Schedule AI</b><span>Schedule에 대해 질문하세요</span></div>
+        <div><b>Leader Schedule AI</b><span>최근 3개월 Schedule 기준</span></div>
         <button type="button" className="ask-fab-close" onClick={()=>setOpen(false)} aria-label="닫기">×</button>
       </div>
       <div className="ask-fab-body" ref={bodyRef}>
-        {!messages.length&&<div className="chat-welcome"><p>Schedule에 대해 질문하세요.</p></div>}
+        {!messages.length&&<div className="chat-welcome"><p>최근 3개월에 제출된 Schedule을 기준으로 질문하세요.</p></div>}
         {messages.map((m,i)=><div className={`bubble ${m.role}`} key={i}>{m.text}</div>)}
         {asking&&<div className="bubble ai asking">답변 작성 중…</div>}
       </div>
@@ -1479,6 +1480,16 @@ function AskChatbot({session}:{session:Session}){
     </button>
   </div>;
 }
+
+const BUILDER_TABS = [
+  { id: "travel", no: "01", label: "출장·휴가" },
+  { id: "events", no: "02", label: "주요 일정" },
+  { id: "issues", no: "03", label: "핵심 이슈" },
+  { id: "ceo", no: "04", label: "CEO 요청" },
+  { id: "keyQuestion", no: "05", label: "Key Question" },
+] as const;
+
+type BuilderTab = (typeof BUILDER_TABS)[number]["id"];
 
 function OptionListEditor({ label, hint, options, onChange }: { label: string; hint?: string; options: string[]; onChange: (next: string[]) => void }) {
   const move = (index: number, delta: number) => {
@@ -1501,15 +1512,9 @@ function OptionListEditor({ label, hint, options, onChange }: { label: string; h
   </div>;
 }
 
-function BuilderSection({ no, name, children }: { no: string; name: string; children: React.ReactNode }) {
-  return <section className="panel builder-section">
-    <div className="builder-section-head"><span>{no}</span><h3>{name}</h3></div>
-    {children}
-  </section>;
-}
-
 function FormBuilderPage({ session }: { session: Session }) {
   const [config, setConfig] = useState<FormConfig | null>(null);
+  const [tab, setTab] = useState<BuilderTab>("travel");
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -1555,7 +1560,7 @@ function FormBuilderPage({ session }: { session: Session }) {
     <SectionTitle
       eyebrow="FORM BUILDER"
       title="양식 만들기"
-      description="사용자가 제출하는 Schedule 작성 양식을 수정합니다. 섹션 제목, 드롭다운 목록, 예시 문구를 바꾸고 저장하면 즉시 반영됩니다."
+      description="왼쪽에서 문구·드롭다운을 수정하면 오른쪽에 실제 작성 화면이 바로 반영됩니다. 미리보기에서 클릭·입력해 확인할 수 있습니다."
       action={<div className="builder-actions">
         <button type="button" className="secondary" onClick={resetToDefault}>기본값 복원</button>
         <button type="button" className="primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "양식 저장"}</button>
@@ -1564,63 +1569,88 @@ function FormBuilderPage({ session }: { session: Session }) {
     {error && <div className="error-box" style={{ marginBottom: 14 }}>{error}</div>}
     {notice && <div className="success-box" style={{ marginBottom: 14 }}>{notice}</div>}
 
-    <BuilderSection no="01" name="출장 및 휴가">
-      <div className="builder-grid">
-        <label>섹션 제목<input value={config.travel.title} onChange={(e) => patch("travel", { title: e.target.value })} /></label>
-        <label>부제목<input value={config.travel.subtitle} onChange={(e) => patch("travel", { subtitle: e.target.value })} /></label>
-        <label>목적지 예시 문구<input value={config.travel.destinationPlaceholder} onChange={(e) => patch("travel", { destinationPlaceholder: e.target.value })} /></label>
-        <label>출장목적 예시 문구<input value={config.travel.purposePlaceholder} onChange={(e) => patch("travel", { purposePlaceholder: e.target.value })} /></label>
-      </div>
-    </BuilderSection>
+    <div className="builder-split">
+      <div className="builder-editor">
+        <div className="builder-tabs" role="tablist" aria-label="양식 섹션">
+          {BUILDER_TABS.map((item) => (
+            <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>
+              <span>{item.no}</span>{item.label}
+            </button>
+          ))}
+        </div>
 
-    <BuilderSection no="02" name="부서의 주요 일정">
-      <div className="builder-grid">
-        <label>섹션 제목<input value={config.events.title} onChange={(e) => patch("events", { title: e.target.value })} /></label>
-        <label>부제목<input value={config.events.subtitle} onChange={(e) => patch("events", { subtitle: e.target.value })} /></label>
-        <label>일정 설명 예시 문구<input value={config.events.descriptionPlaceholder} onChange={(e) => patch("events", { descriptionPlaceholder: e.target.value })} /></label>
-        <label>직접 입력 예시 문구<input value={config.events.directInputPlaceholder} onChange={(e) => patch("events", { directInputPlaceholder: e.target.value })} /></label>
-      </div>
-      <OptionListEditor
-        label="유형 드롭다운 목록"
-        hint="'- 선택 -'과 '직접 입력'은 항상 맨 위에 고정됩니다."
-        options={config.events.typeOptions}
-        onChange={(next) => patch("events", { typeOptions: next })}
-      />
-    </BuilderSection>
+        <section className="panel builder-section" role="tabpanel">
+          {tab === "travel" && <>
+            <div className="builder-section-head"><span>01</span><div><h3>출장 및 휴가</h3><p>섹션 제목과 입력 예시 문구를 수정하세요.</p></div></div>
+            <div className="builder-grid">
+              <label>섹션 제목<input value={config.travel.title} onChange={(e) => patch("travel", { title: e.target.value })} /></label>
+              <label>부제목<input value={config.travel.subtitle} onChange={(e) => patch("travel", { subtitle: e.target.value })} /></label>
+              <label>목적지 예시 문구<input value={config.travel.destinationPlaceholder} onChange={(e) => patch("travel", { destinationPlaceholder: e.target.value })} placeholder="도시/장소" /></label>
+              <label>출장목적 예시 문구<input value={config.travel.purposePlaceholder} onChange={(e) => patch("travel", { purposePlaceholder: e.target.value })} placeholder="출장 목적" /></label>
+            </div>
+          </>}
 
-    <BuilderSection no="03" name="부서의 핵심 이슈">
-      <div className="builder-grid">
-        <label>섹션 제목<input value={config.issues.title} onChange={(e) => patch("issues", { title: e.target.value })} /></label>
-        <label>부제목<input value={config.issues.subtitle} onChange={(e) => patch("issues", { subtitle: e.target.value })} /></label>
-        <label>상세 내용 예시 문구<input value={config.issues.detailsPlaceholder} onChange={(e) => patch("issues", { detailsPlaceholder: e.target.value })} /></label>
-        <label>일정·마감 예시 문구<input value={config.issues.deadlinePlaceholder} onChange={(e) => patch("issues", { deadlinePlaceholder: e.target.value })} /></label>
-      </div>
-      <OptionListEditor
-        label="카테고리 드롭다운 목록"
-        hint="첫 번째 옵션이 기본 선택값이 됩니다."
-        options={config.issues.categoryOptions}
-        onChange={(next) => patch("issues", { categoryOptions: next })}
-      />
-    </BuilderSection>
+          {tab === "events" && <>
+            <div className="builder-section-head"><span>02</span><div><h3>부서의 주요 일정</h3><p>유형 목록은 ↑↓로 순서를 바꿀 수 있습니다.</p></div></div>
+            <div className="builder-grid">
+              <label>섹션 제목<input value={config.events.title} onChange={(e) => patch("events", { title: e.target.value })} /></label>
+              <label>부제목<input value={config.events.subtitle} onChange={(e) => patch("events", { subtitle: e.target.value })} /></label>
+              <label>일정 설명 예시 문구<input value={config.events.descriptionPlaceholder} onChange={(e) => patch("events", { descriptionPlaceholder: e.target.value })} /></label>
+              <label>직접 입력 예시 문구<input value={config.events.directInputPlaceholder} onChange={(e) => patch("events", { directInputPlaceholder: e.target.value })} /></label>
+            </div>
+            <OptionListEditor
+              label="유형 드롭다운 목록"
+              hint="'- 선택 -'과 '직접 입력'은 항상 맨 위에 고정됩니다."
+              options={config.events.typeOptions}
+              onChange={(next) => patch("events", { typeOptions: next })}
+            />
+          </>}
 
-    <BuilderSection no="04" name="CEO 요청사항">
-      <div className="builder-grid">
-        <label>섹션 제목<input value={config.ceo.title} onChange={(e) => patch("ceo", { title: e.target.value })} /></label>
-        <label>부제목<input value={config.ceo.subtitle} onChange={(e) => patch("ceo", { subtitle: e.target.value })} /></label>
-        <label className="builder-wide">내용 예시 문구<textarea value={config.ceo.placeholder} onChange={(e) => patch("ceo", { placeholder: e.target.value })} rows={2} /></label>
-      </div>
-    </BuilderSection>
+          {tab === "issues" && <>
+            <div className="builder-section-head"><span>03</span><div><h3>부서의 핵심 이슈</h3><p>첫 번째 카테고리가 기본 선택값이 됩니다.</p></div></div>
+            <div className="builder-grid">
+              <label>섹션 제목<input value={config.issues.title} onChange={(e) => patch("issues", { title: e.target.value })} /></label>
+              <label>부제목<input value={config.issues.subtitle} onChange={(e) => patch("issues", { subtitle: e.target.value })} /></label>
+              <label>상세 내용 예시 문구<input value={config.issues.detailsPlaceholder} onChange={(e) => patch("issues", { detailsPlaceholder: e.target.value })} /></label>
+              <label>일정·마감 예시 문구<input value={config.issues.deadlinePlaceholder} onChange={(e) => patch("issues", { deadlinePlaceholder: e.target.value })} /></label>
+            </div>
+            <OptionListEditor
+              label="카테고리 드롭다운 목록"
+              hint="첫 번째 옵션이 기본 선택값이 됩니다."
+              options={config.issues.categoryOptions}
+              onChange={(next) => patch("issues", { categoryOptions: next })}
+            />
+          </>}
 
-    <BuilderSection no="05" name="Key Question">
-      <div className="builder-grid">
-        <label>섹션 제목<input value={config.keyQuestion.title} onChange={(e) => patch("keyQuestion", { title: e.target.value })} /></label>
-        <label>부제목<input value={config.keyQuestion.subtitle} onChange={(e) => patch("keyQuestion", { subtitle: e.target.value })} /></label>
-        <label className="builder-wide">내용 예시 문구<textarea value={config.keyQuestion.placeholder} onChange={(e) => patch("keyQuestion", { placeholder: e.target.value })} rows={2} /></label>
-      </div>
-    </BuilderSection>
+          {tab === "ceo" && <>
+            <div className="builder-section-head"><span>04</span><div><h3>CEO 요청사항</h3><p>선택 작성 영역의 제목과 예시 문구입니다.</p></div></div>
+            <div className="builder-grid">
+              <label>섹션 제목<input value={config.ceo.title} onChange={(e) => patch("ceo", { title: e.target.value })} /></label>
+              <label>부제목<input value={config.ceo.subtitle} onChange={(e) => patch("ceo", { subtitle: e.target.value })} /></label>
+              <label className="builder-wide">내용 예시 문구<textarea value={config.ceo.placeholder} onChange={(e) => patch("ceo", { placeholder: e.target.value })} rows={3} /></label>
+            </div>
+          </>}
 
-    <div className="builder-footer">
-      <button type="button" className="primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "양식 저장"}</button>
+          {tab === "keyQuestion" && <>
+            <div className="builder-section-head"><span>05</span><div><h3>Key Question</h3><p>선택 작성 영역의 제목과 예시 문구입니다.</p></div></div>
+            <div className="builder-grid">
+              <label>섹션 제목<input value={config.keyQuestion.title} onChange={(e) => patch("keyQuestion", { title: e.target.value })} /></label>
+              <label>부제목<input value={config.keyQuestion.subtitle} onChange={(e) => patch("keyQuestion", { subtitle: e.target.value })} /></label>
+              <label className="builder-wide">내용 예시 문구<textarea value={config.keyQuestion.placeholder} onChange={(e) => patch("keyQuestion", { placeholder: e.target.value })} rows={3} /></label>
+            </div>
+          </>}
+        </section>
+
+        <div className="builder-footer">
+          <button type="button" className="primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "양식 저장"}</button>
+        </div>
+      </div>
+
+      <aside className="builder-preview-pane">
+        <div className="builder-preview-sticky">
+          <FormPreview config={config} />
+        </div>
+      </aside>
     </div>
   </div>;
 }
