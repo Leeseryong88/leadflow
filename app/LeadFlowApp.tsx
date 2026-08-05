@@ -63,9 +63,26 @@ const emptyDraft = () => ({
   weekLabel: weekLabelFromReportDate(),
   travel: [] as Travel[], events: [] as EventItem[], issues: [] as Issue[], ceoRequests: "", keyQuestion: "",
 });
-const navAdmin = [["calendar", "캘린더", "📅"], ["reports", "전체 Schedule", "📋"], ["users", "사용자 관리", "👥"], ["collect", "데이터 취합", "🗂️"], ["ai", "Leader Schedule AI", "✦"]];
-const navLeader = [["reports", "Schedule", "📋"]];
+const navAdmin = [["calendar", "캘린더"], ["reports", "전체 Schedule"], ["users", "사용자 관리"], ["collect", "데이터 취합"], ["ai", "Leader Schedule AI"]];
+const navLeader = [["reports", "Schedule"]];
 const REPORTS_PAGE_SIZE = 8;
+
+function NavIcon({ id }: { id: string }) {
+  const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+  if (id === "calendar") {
+    return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>;
+  }
+  if (id === "reports") {
+    return <svg {...common}><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>;
+  }
+  if (id === "users") {
+    return <svg {...common}><circle cx="9" cy="8" r="3.2"/><path d="M2.5 19c.6-3.2 3-5 6.5-5s5.9 1.8 6.5 5"/><circle cx="17.5" cy="9" r="2.4"/><path d="M15.2 19c.4-1.8 1.7-3 3.8-3.4"/></svg>;
+  }
+  if (id === "collect") {
+    return <svg {...common}><path d="M4 7l8-3 8 3-8 3-8-3z"/><path d="M4 12l8 3 8-3"/><path d="M4 17l8 3 8-3"/></svg>;
+  }
+  return <svg {...common}><path d="M12 3l1.6 4.8L18.5 9l-4.2 3 1.3 5L12 14.4 8.4 17l1.3-5L5.5 9l4.9-1.2L12 3z"/></svg>;
+}
 
 function fmtDate(value: string) {
   if (!value) return "-";
@@ -128,7 +145,7 @@ function Header({ profile, onLogout }: { profile: Profile; onLogout: () => void 
 
 function Sidebar({ profile, page, setPage }: { profile: Profile; page: string; setPage: (p:string)=>void }) {
   const nav = profile.role === "admin" ? navAdmin : navLeader;
-  return <aside className="sidebar"><div className="brand"><span className="brand-mark">L</span><span>Leader Schedule</span></div><div className="side-label">MENU</div><nav>{nav.map(([id,label,icon])=><button key={id} className={page===id?"active":""} onClick={()=>setPage(id)}><span>{icon}</span>{label}{id==="ai"&&<i>AI</i>}</button>)}</nav></aside>;
+  return <aside className="sidebar"><div className="brand"><span className="brand-mark">L</span><span>Leader Schedule</span></div><div className="side-label">MENU</div><nav>{nav.map(([id,label])=><button key={id} className={page===id?"active":""} onClick={()=>setPage(id)}><span className="nav-icon"><NavIcon id={id}/></span>{label}{id==="ai"&&<i>AI</i>}</button>)}</nav></aside>;
 }
 
 function SectionTitle({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) {
@@ -163,12 +180,22 @@ function addDays(d: Date, n: number) {
   next.setDate(next.getDate() + n);
   return next;
 }
+function formatKoDate(d: Date, opts?: { withYear?: boolean }) {
+  const withYear = opts?.withYear ?? true;
+  const monthDay = `${d.getMonth() + 1}월 ${d.getDate()}일`;
+  return withYear ? `${d.getFullYear()}년 ${monthDay}` : monthDay;
+}
 function formatCalPeriodLabel(range: CalRange, anchor: Date) {
   if (range === "month") return `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월`;
   const start = startOfWeek(anchor);
   const end = addDays(start, range === "week" ? 6 : 13);
-  const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
-  return `${start.getFullYear()}년 ${fmt(start)} — ${fmt(end)}`;
+  if (start.getFullYear() !== end.getFullYear()) {
+    return `${formatKoDate(start)} ~ ${formatKoDate(end)}`;
+  }
+  if (start.getMonth() !== end.getMonth()) {
+    return `${formatKoDate(start)} ~ ${formatKoDate(end, { withYear: false })}`;
+  }
+  return `${formatKoDate(start)} ~ ${end.getDate()}일`;
 }
 function collectTravelItems(reports: Report[], kind: CalKind): DayTravelItem[] {
   return reports.flatMap((r) => (r.travel || []).map((t, travelIndex) => ({
@@ -470,23 +497,33 @@ function AdminCalendarBoard({ reports, onSelectDay }: { reports: Report[]; onSel
         ))}
       </div>
       <div className="calendar-nav">
-        <button type="button" onClick={() => shift(-1)} aria-label="이전 기간">←</button>
-        <b>{formatCalPeriodLabel(range, anchor)}</b>
-        <button type="button" onClick={() => shift(1)} aria-label="다음 기간">→</button>
+        <div className="calendar-nav-period">
+          <button type="button" onClick={() => shift(-1)} aria-label="이전 기간">←</button>
+          <b>{formatCalPeriodLabel(range, anchor)}</b>
+          <button type="button" onClick={() => shift(1)} aria-label="다음 기간">→</button>
+        </div>
         {range === "fortnight" && (
-          <label className="calendar-period-field">기간 시작일
-            <input type="date" value={toIsoDate(anchor)} onChange={(e) => {
-              if (!e.target.value) return;
-              setAnchor(parseIsoDate(e.target.value));
-            }} />
+          <label className="calendar-period-field">
+            <span className="period-field-label">시작일</span>
+            <input
+              type="date"
+              value={toIsoDate(startOfWeek(anchor))}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setAnchor(startOfWeek(parseIsoDate(e.target.value)));
+              }}
+            />
+            <span className="period-field-value">{formatKoDate(startOfWeek(anchor))}</span>
           </label>
         )}
-        <button type="button" className="secondary today-btn" onClick={() => setAnchor(parseIsoDate(today))}>오늘</button>
-        <button type="button" className="primary print-cal-btn" onClick={() => printCalendars(range, anchor, leaveItems, travelItems)}>인쇄하기</button>
+        <div className="calendar-nav-actions">
+          <button type="button" className="secondary today-btn" onClick={() => setAnchor(parseIsoDate(today))}>오늘</button>
+          <button type="button" className="primary print-cal-btn" onClick={() => printCalendars(range, anchor, leaveItems, travelItems)}>인쇄하기</button>
+        </div>
       </div>
       <p className="muted cal-range-hint">
         {range === "week" && "1주 단위로 표시하며, 하루에 더 많은 일정을 펼쳐 보여 줍니다."}
-        {range === "fortnight" && "2주 단위로 표시합니다. 기간 시작일을 지정해 보고 싶은 구간을 맞출 수 있습니다."}
+        {range === "fortnight" && "2주 단위로 표시합니다. 시작일을 고르면 해당 주 일요일부터 2주 구간이 맞춰집니다."}
         {range === "month" && "월 단위 개요입니다. 일정이 많으면 날짜를 눌러 전체 목록을 확인하세요."}
       </p>
     </div>
