@@ -404,7 +404,7 @@ function buildPrintCalendarBlock(kind: CalKind, title: string, range: CalRange, 
   }).join("");
 
   return `<section class="p-cal ${kind}">
-    <header><p>${esc(title)}</p><h2>${esc(formatCalPeriodLabel(range, anchor))}</h2></header>
+    <header><p>${esc(title)}</p></header>
     <div class="p-weekdays">${["일", "월", "화", "수", "목", "금", "토"].map((d) => `<span>${d}</span>`).join("")}</div>
     <div class="p-grid">${weekHtml}</div>
   </section>`;
@@ -427,11 +427,10 @@ function printCalendars(range: CalRange, anchor: Date, leaveItems: DayTravelItem
   .p-cal{flex:1 1 0;min-height:0;display:flex;flex-direction:column;border:1px solid #d7deea;padding:2.5mm;overflow:hidden}
   .p-cal.leave{box-shadow:inset 2.5mm 0 0 #d89b15}
   .p-cal.travel{box-shadow:inset 2.5mm 0 0 #1f5eff}
-  .p-cal header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:1.5mm;flex:0 0 auto}
+  .p-cal header{margin-bottom:1.5mm;flex:0 0 auto}
   .p-cal header p{margin:0;font:700 9px "DM Mono",monospace;letter-spacing:.08em;color:#6d7788}
   .p-cal.leave header p{color:#846116}
   .p-cal.travel header p{color:#1f5eff}
-  .p-cal header h2{margin:0;font:500 12px "DM Mono",monospace}
   .p-weekdays{display:grid;grid-template-columns:repeat(7,1fr);flex:0 0 auto}
   .p-weekdays span{text-align:center;padding:1mm 0;color:#8993a3;font:8px "DM Mono",monospace}
   .p-grid{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border-top:1px solid #d7deea;border-left:1px solid #d7deea}
