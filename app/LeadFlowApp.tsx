@@ -523,7 +523,6 @@ function AdminCalendarBoard({ reports, onSelectDay }: { reports: Report[]; onSel
                 setAnchor(startOfWeek(parseIsoDate(e.target.value)));
               }}
             />
-            <span className="period-field-value">{formatKoDate(startOfWeek(anchor))}</span>
           </label>
         )}
         <div className="calendar-nav-actions">
