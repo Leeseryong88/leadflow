@@ -59,8 +59,8 @@ const emptyDraft = () => ({
   weekLabel: weekLabelFromReportDate(),
   travel: [] as Travel[], events: [] as EventItem[], issues: [] as Issue[], ceoRequests: "", keyQuestion: "",
 });
-const navAdmin = [["reports", "보고서", "▤"], ["users", "사용자 관리", "◎"], ["ai", "LeadFlow AI", "✦"]];
-const navLeader = [["reports", "보고서", "▤"]];
+const navAdmin = [["reports", "Schedule", "▤"], ["users", "사용자 관리", "◎"], ["ai", "Leader Schedule AI", "✦"]];
+const navLeader = [["reports", "Schedule", "▤"]];
 const REPORTS_PAGE_SIZE = 8;
 
 function fmtDate(value: string) {
@@ -92,7 +92,7 @@ function Login({ onLogin }: { onLogin: (session: Session, profile: Profile) => v
   return <main className="login-page">
     <section className="login-panel">
       <form className="login-card" onSubmit={submit}>
-        <div className="mobile-brand"><span className="brand-mark">L</span> LEADFLOW</div>
+        <div className="mobile-brand"><span className="brand-mark">L</span> Leader Schedule</div>
         <h2>로그인</h2>
         <label>사번<input value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="사번입력" autoComplete="username" required/></label>
         <label>비밀번호<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="비밀번호 입력" autoComplete="current-password" required/></label>
@@ -119,12 +119,12 @@ function PasswordGate({ session, onDone }: { session: Session; profile: Profile;
 
 function Header({ profile, onLogout }: { profile: Profile; onLogout: () => void }) {
   const [open, setOpen] = useState(false);
-  return <header className="topbar"><div><p className="top-title">LeadFlow</p></div><div className="profile-wrap"><button className="profile" onClick={()=>setOpen(!open)}><span className="avatar">{profile.name.slice(0,1)}</span><span><b>{profile.name}</b><small>{profile.department} · {profile.role === "admin" ? "관리자" : "리더"}</small></span><i>⌄</i></button>{open&&<div className="profile-menu"><span>{profile.employeeNumber}</span><button onClick={onLogout}>로그아웃</button></div>}</div></header>;
+  return <header className="topbar"><div><p className="top-title">Leader Schedule</p></div><div className="profile-wrap"><button className="profile" onClick={()=>setOpen(!open)}><span className="avatar">{profile.name.slice(0,1)}</span><span><b>{profile.name}</b><small>{profile.department} · {profile.role === "admin" ? "관리자" : "리더"}</small></span><i>⌄</i></button>{open&&<div className="profile-menu"><span>{profile.employeeNumber}</span><button onClick={onLogout}>로그아웃</button></div>}</div></header>;
 }
 
 function Sidebar({ profile, page, setPage }: { profile: Profile; page: string; setPage: (p:string)=>void }) {
   const nav = profile.role === "admin" ? navAdmin : navLeader;
-  return <aside className="sidebar"><div className="brand"><span className="brand-mark">L</span><span>LEADFLOW</span></div><div className="side-label">MENU</div><nav>{nav.map(([id,label,icon])=><button key={id} className={page===id?"active":""} onClick={()=>setPage(id)}><span>{icon}</span>{label}{id==="ai"&&<i>AI</i>}</button>)}</nav></aside>;
+  return <aside className="sidebar"><div className="brand"><span className="brand-mark">L</span><span>Leader Schedule</span></div><div className="side-label">MENU</div><nav>{nav.map(([id,label,icon])=><button key={id} className={page===id?"active":""} onClick={()=>setPage(id)}><span>{icon}</span>{label}{id==="ai"&&<i>AI</i>}</button>)}</nav></aside>;
 }
 
 function SectionTitle({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) {
@@ -133,10 +133,11 @@ function SectionTitle({ eyebrow, title, description, action }: { eyebrow?: strin
 
 function ReportTable({ reports, onSelect, onDelete, empty }: { reports: Report[]; onSelect?:(r:Report)=>void; onDelete?:(r:Report)=>void; empty:string }) {
   if (!reports.length) return <div className="empty"><span>▤</span><p>{empty}</p></div>;
-  return <div className="table-wrap"><table><thead><tr><th>주차</th><th>부서</th><th>작성자</th><th>제출일</th><th>핵심 이슈</th><th></th></tr></thead><tbody>{reports.map(r=><tr key={r.id} onClick={()=>onSelect?.(r)}><td><b>{r.weekLabel}</b></td><td><span className="dept-tag">{r.department}</span></td><td>{r.authorName}</td><td>{fmtDate(r.submittedAt)}</td><td>{(r.issues||[]).length}건</td><td className="row-actions" onClick={(e)=>e.stopPropagation()}>{onDelete&&<button type="button" className="danger-text" onClick={()=>onDelete(r)}>삭제</button>}<button type="button" className="row-open" aria-label="보고서 열기" onClick={()=>onSelect?.(r)}>→</button></td></tr>)}</tbody></table></div>;
+  return <div className="table-wrap"><table><thead><tr><th>주차</th><th>부서</th><th>작성자</th><th>제출일</th><th>핵심 이슈</th><th></th></tr></thead><tbody>{reports.map(r=><tr key={r.id} onClick={()=>onSelect?.(r)}><td><b>{r.weekLabel}</b></td><td><span className="dept-tag">{r.department}</span></td><td>{r.authorName}</td><td>{fmtDate(r.submittedAt)}</td><td>{(r.issues||[]).length}건</td><td className="row-actions" onClick={(e)=>e.stopPropagation()}>{onDelete&&<button type="button" className="danger-text" onClick={()=>onDelete(r)}>삭제</button>}<button type="button" className="row-open" aria-label="Schedule 열기" onClick={()=>onSelect?.(r)}>→</button></td></tr>)}</tbody></table></div>;
 }
 
 type DayTravelItem = Travel & { department: string; name: string; key: string };
+type WeekSegment = { item: DayTravelItem; startCol: number; endCol: number; continuesLeft: boolean; continuesRight: boolean; lane: number };
 
 function TravelCalendar({ reports, compact = false, onSelectDay }: { reports: Report[]; compact?: boolean; onSelectDay?: (date: string, items: DayTravelItem[]) => void }) {
   const [cursor, setCursor] = useState(new Date());
@@ -150,15 +151,49 @@ function TravelCalendar({ reports, compact = false, onSelectDay }: { reports: Re
   const month = cursor.getMonth();
   const first = new Date(year, month, 1);
   const days = new Date(year, month + 1, 0).getDate();
-  const cells = [...Array(first.getDay()).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const cells: (number | null)[] = [...Array(first.getDay()).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   while (cells.length % 7) cells.push(null);
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const dateKey = (d: number) => `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const inDay = (d: number) => items.filter((t) => t.start <= dateKey(d) && t.end >= dateKey(d));
-  const limit = compact ? 2 : 3;
+  const laneLimit = compact ? 2 : 3;
   function openDay(d: number) {
     const dayItems = inDay(d);
     if (!dayItems.length) return;
     onSelectDay?.(dateKey(d), dayItems);
+  }
+
+  /** 한 주 안에서 각 출장·휴가를 연속 구간(바)으로 계산하고 겹치지 않게 줄(lane)을 배정한다. */
+  function weekSegments(week: (number | null)[]): WeekSegment[] {
+    const segments: Omit<WeekSegment, "lane">[] = [];
+    for (const item of items) {
+      let startCol = -1, endCol = -1;
+      week.forEach((d, col) => {
+        if (!d) return;
+        const key = dateKey(d);
+        if (item.start <= key && item.end >= key) {
+          if (startCol === -1) startCol = col;
+          endCol = col;
+        }
+      });
+      if (startCol === -1) continue;
+      segments.push({
+        item,
+        startCol,
+        endCol,
+        continuesLeft: item.start < dateKey(week[startCol] as number),
+        continuesRight: item.end > dateKey(week[endCol] as number),
+      });
+    }
+    segments.sort((a, b) => a.startCol - b.startCol || (b.endCol - b.startCol) - (a.endCol - a.startCol));
+    const laneEnds: number[] = [];
+    return segments.map((segment) => {
+      let lane = laneEnds.findIndex((end) => end < segment.startCol);
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(segment.endCol); }
+      else laneEnds[lane] = segment.endCol;
+      return { ...segment, lane };
+    });
   }
 
   return <section className={`calendar panel${compact ? " compact" : ""}`}>
@@ -168,33 +203,44 @@ function TravelCalendar({ reports, compact = false, onSelectDay }: { reports: Re
       <button type="button" onClick={() => setCursor(new Date(year, month + 1, 1))}>→</button>
     </div>
     <div className="weekdays">{["일", "월", "화", "수", "목", "금", "토"].map((d) => <span key={d}>{d}</span>)}</div>
-    <div className="calendar-grid">{cells.map((d, i) => {
-      const dayItems = d ? inDay(d) : [];
-      const clickable = Boolean(d && dayItems.length);
-      return <div
-        className={`day ${d && dateKey(d) === today ? "today" : ""}${clickable ? " has-travel" : ""}`}
-        key={i}
-        role={clickable ? "button" : undefined}
-        tabIndex={clickable ? 0 : undefined}
-        onClick={() => d && openDay(d)}
-        onKeyDown={(e) => { if (d && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openDay(d); } }}
-      >{d && <>
-        <b>{d}</b>
-        <div className="day-items">
-          {dayItems.slice(0, limit).map((t) => {
-            const isLeave = t.type.includes("휴가");
+    <div className="calendar-grid">{weeks.map((week, weekIndex) => {
+      const segments = weekSegments(week);
+      const visible = segments.filter((segment) => segment.lane < laneLimit);
+      const hiddenCount = (col: number) => segments.filter((segment) => segment.lane >= laneLimit && segment.startCol <= col && segment.endCol >= col).length;
+      return <div className="cal-week" key={weekIndex}>
+        <div className="cal-week-days">
+          {week.map((d, i) => {
+            const dayItems = d ? inDay(d) : [];
+            const clickable = Boolean(d && dayItems.length);
+            const hidden = d ? hiddenCount(i) : 0;
+            return <div
+              className={`day ${d && dateKey(d) === today ? "today" : ""}${clickable ? " has-travel" : ""}`}
+              key={i}
+              role={clickable ? "button" : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={() => d && openDay(d)}
+              onKeyDown={(e) => { if (d && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openDay(d); } }}
+            >{d && <>
+              <b>{d}</b>
+              {hidden > 0 && <small className="day-more">+{hidden}건</small>}
+            </>}</div>;
+          })}
+        </div>
+        <div className="cal-week-bars">
+          {visible.map((segment) => {
+            const isLeave = segment.item.type.includes("휴가");
             return <span
-              key={t.key}
-              className={`cal-chip ${isLeave ? "leave" : "travel"}`}
-              title={`${t.name} · ${t.type}${t.destination ? ` · ${t.destination}` : ""}`}
+              key={segment.item.key}
+              className={`cal-bar ${isLeave ? "leave" : "travel"}${segment.continuesLeft ? " cont-l" : ""}${segment.continuesRight ? " cont-r" : ""}`}
+              style={{ gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`, gridRow: segment.lane + 1 }}
+              title={`${segment.item.name} · ${segment.item.type}${segment.item.destination ? ` · ${segment.item.destination}` : ""}`}
             >
               <em>{isLeave ? "휴가" : "출장"}</em>
-              <span>{t.name}</span>
+              <span>{segment.item.name}</span>
             </span>;
           })}
-          {dayItems.length > limit && <small>+{dayItems.length - limit}건</small>}
         </div>
-      </>}</div>;
+      </div>;
     })}</div>
     <div className="legend"><span><i className="dot travel"></i>출장</span><span><i className="dot leave"></i>휴가</span></div>
   </section>;
@@ -228,7 +274,7 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
       setListMessage(result.message);
       setPendingDelete(null);
     } catch (err) {
-      setListMessage(err instanceof Error ? err.message : "보고서를 삭제하지 못했습니다.");
+      setListMessage(err instanceof Error ? err.message : "Schedule을 삭제하지 못했습니다.");
     } finally {
       setDeleting(false);
     }
@@ -236,11 +282,11 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
 
   if (profile.role === "admin") {
     return <div className="content admin-board">
-      <SectionTitle title="보고서" />
+      <SectionTitle title="Schedule" />
       <div className="admin-board-grid">
         <TravelCalendar reports={reports} compact onSelectDay={(date, items) => setDayTravel({ date, items })} />
         <section className="panel admin-reports-panel">
-          <div className="panel-head"><div><h3>전체 보고서</h3></div><span className="result-count">{filtered.length}건</span></div>
+          <div className="panel-head"><div><h3>전체 Schedule</h3></div><span className="result-count">{filtered.length}건</span></div>
           <div className="filters compact">
             <div className="search"><span>⌕</span><input placeholder="작성자, 부서, 주차 검색" value={query} onChange={(e) => updateQuery(e.target.value)} /></div>
             <select value={department} onChange={(e) => updateDepartment(e.target.value)}>{departments.map((d) => <option key={d}>{d}</option>)}</select>
@@ -251,7 +297,7 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
               reports={paged}
               onSelect={setSelected}
               onDelete={(report) => { setListMessage(""); setPendingDelete(report); }}
-              empty="조건에 맞는 보고서가 없습니다."
+              empty="조건에 맞는 Schedule이 없습니다."
             />
           </div>
           <div className="pagination">
@@ -266,8 +312,8 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
       {pendingDelete && (
         <div className="modal-backdrop" onMouseDown={() => !deleting && setPendingDelete(null)}>
           <div className="modal confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>보고서 삭제</h2>
-            <p className="muted"><b>{pendingDelete.authorName}</b> · {pendingDelete.weekLabel} 보고서를 삭제할까요?<br />삭제 후 복구할 수 없습니다.</p>
+            <h2>Schedule 삭제</h2>
+            <p className="muted"><b>{pendingDelete.authorName}</b> · {pendingDelete.weekLabel} Schedule을 삭제할까요?<br />삭제 후 복구할 수 없습니다.</p>
             <div className="confirm-actions">
               <button type="button" className="secondary" disabled={deleting} onClick={() => setPendingDelete(null)}>취소</button>
               <button type="button" className="danger" disabled={deleting} onClick={confirmDeleteReport}>{deleting ? "삭제 중..." : "삭제"}</button>
@@ -279,14 +325,14 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
   }
 
   return <div className="content">
-    <SectionTitle title="내 보고 이력" action={onCreate ? <button type="button" className="primary report-create-desktop" onClick={onCreate}>+ 새 보고서 작성</button> : undefined} />
+    <SectionTitle title="내 Schedule 이력" action={onCreate ? <button type="button" className="primary report-create-desktop" onClick={onCreate}>+ 새 Schedule 작성</button> : undefined} />
     <div className="filters">
       <div className="search"><span>⌕</span><input placeholder="작성자, 부서, 주차 검색" value={query} onChange={(e) => updateQuery(e.target.value)} /></div>
       <span className="result-count">{filtered.length}건</span>
     </div>
     <section className="panel">
-      <ReportTable reports={paged} onSelect={setSelected} empty="조건에 맞는 보고서가 없습니다." />
-      {onCreate && <button type="button" className="mobile-report-create" onClick={onCreate} aria-label="새 보고서 작성"><span>+</span><b>새 보고서 작성</b></button>}
+      <ReportTable reports={paged} onSelect={setSelected} empty="조건에 맞는 Schedule이 없습니다." />
+      {onCreate && <button type="button" className="mobile-report-create" onClick={onCreate} aria-label="새 Schedule 작성"><span>+</span><b>새 Schedule 작성</b></button>}
       <div className="pagination">
         <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>←</button>
         <span>{currentPage} / {totalPages}</span>
@@ -335,7 +381,7 @@ function ReportViewer({report,onClose}:{report:Report;onClose:()=>void}) {
     const period=t.end&&t.end!==t.start?`${t.start} ~ ${t.end}`:t.start;
     return [t.type,t.name||report.authorName,period,isLeave?"-":(t.destination||"-"),isLeave?"-":(t.purpose||"-")];
   });
-  return <div className="report-view-backdrop" onMouseDown={onClose}><article className="report-view-modal" role="dialog" aria-modal="true" aria-label="보고서 상세" onMouseDown={e=>e.stopPropagation()}><button className="drawer-close" onClick={onClose}>×</button><div className="paper-head"><p>Weekly Leadership Update</p><div><span><b>부서</b> {report.department}</span><span><b>작성자</b> {report.authorName}</span><span><b>주차</b> {report.weekLabel}</span></div></div><PaperSection no="01" title="출장 및 휴가" en="Travel & Time Off"><MiniTable heads={["TYPE","NAME","PERIOD","DESTINATION","PURPOSE"]} rows={travelRows}/></PaperSection><PaperSection no="02" title="부서의 주요 일정" en="Key Dates & Events"><MiniTable heads={["DATE","TYPE","DESCRIPTION","LOCATION"]} rows={(report.events||[]).map(t=>[t.date,t.type,t.description,t.location])}/></PaperSection><PaperSection no="03" title="부서의 핵심 이슈 · CEO 보고사항" en="Key Issues & Asks"><MiniTable heads={["CATEGORY","DETAILS","DEADLINE"]} rows={(report.issues||[]).map(t=>[t.category,t.details,t.deadline])}/></PaperSection><PaperSection no="04" title="CEO 요청사항"><p className="paper-text">{report.ceoRequests||"해당 없음"}</p></PaperSection><PaperSection no="05" title="Key Question"><p className="paper-text">{report.keyQuestion||"해당 없음"}</p></PaperSection></article></div>;
+  return <div className="report-view-backdrop" onMouseDown={onClose}><article className="report-view-modal" role="dialog" aria-modal="true" aria-label="Schedule 상세" onMouseDown={e=>e.stopPropagation()}><button className="drawer-close" onClick={onClose}>×</button><div className="paper-head"><p>Weekly Leadership Update</p><div><span><b>부서</b> {report.department}</span><span><b>작성자</b> {report.authorName}</span><span><b>주차</b> {report.weekLabel}</span></div></div><PaperSection no="01" title="출장 및 휴가" en="Travel & Time Off"><MiniTable heads={["TYPE","NAME","PERIOD","DESTINATION","PURPOSE"]} rows={travelRows}/></PaperSection><PaperSection no="02" title="부서의 주요 일정" en="Key Dates & Events"><MiniTable heads={["DATE","TYPE","DESCRIPTION","LOCATION"]} rows={(report.events||[]).map(t=>[t.date,t.type,t.description,t.location])}/></PaperSection><PaperSection no="03" title="부서의 핵심 이슈 · CEO 보고사항" en="Key Issues & Asks"><MiniTable heads={["CATEGORY","DETAILS","DEADLINE"]} rows={(report.issues||[]).map(t=>[t.category,t.details,t.deadline])}/></PaperSection><PaperSection no="04" title="CEO 요청사항"><p className="paper-text">{report.ceoRequests||"해당 없음"}</p></PaperSection><PaperSection no="05" title="Key Question"><p className="paper-text">{report.keyQuestion||"해당 없음"}</p></PaperSection></article></div>;
 }
 function PaperSection({no,title,en,children}:{no:string;title:string;en?:string;children:React.ReactNode}){return <section className="paper-section"><h3><span>{no}</span>{title}{en&&<em>· {en}</em>}</h3>{children}</section>}
 function MiniTable({heads,rows}:{heads:string[];rows:string[][]}){return <div className="mini-table"><div className="mini-row head" style={{gridTemplateColumns:`repeat(${heads.length}, minmax(80px,1fr))`}}>{heads.map(h=><span key={h}>{h}</span>)}</div>{rows.length?rows.map((row,i)=><div className="mini-row" key={i} style={{gridTemplateColumns:`repeat(${heads.length}, minmax(80px,1fr))`}}>{row.map((c,j)=><span key={j}>{c||"-"}</span>)}</div>):<p className="paper-empty">해당 없음</p>}</div>}
@@ -347,9 +393,9 @@ export function LegacyReportWriter({session,profile,onSaved}:{session:Session;pr
   const addEvent=()=>update("events",[...draft.events,{date:today,type:"회의",description:"",location:"",notes:""}]);
   const addIssue=()=>update("issues",[...draft.issues,{category:"핵심이슈",details:"",deadline:""}]);
   function rowUpdate<T extends Record<string,string>>(key:"travel"|"events"|"issues",index:number,field:keyof T,value:string){const rows=[...(draft[key] as unknown as T[])];rows[index]={...rows[index],[field]:value};update(key,rows)}
-  async function submit(){setSaving(true);setMessage("");try{const report={...draft,id:crypto.randomUUID(),department:profile.department,authorId:profile.uid,authorName:profile.name,employeeNumber:profile.employeeNumber,createdAt:new Date().toISOString(),submittedAt:new Date().toISOString()};await createDocument("reports",report.id,report,session.idToken);onSaved(report);setDraft(emptyDraft());setStep(1);setMessage("보고서가 성공적으로 제출되었습니다.");}catch(err){setMessage(err instanceof Error?err.message:"제출하지 못했습니다.");}finally{setSaving(false)}}
+  async function submit(){setSaving(true);setMessage("");try{const report={...draft,id:crypto.randomUUID(),department:profile.department,authorId:profile.uid,authorName:profile.name,employeeNumber:profile.employeeNumber,createdAt:new Date().toISOString(),submittedAt:new Date().toISOString()};await createDocument("reports",report.id,report,session.idToken);onSaved(report);setDraft(emptyDraft());setStep(1);setMessage("Schedule이 성공적으로 제출되었습니다.");}catch(err){setMessage(err instanceof Error?err.message:"제출하지 못했습니다.");}finally{setSaving(false)}}
   const titles=[["01","출장 및 휴가","Travel & Time Off"],["02","부서의 주요 일정","Key Dates & Events"],["03","부서의 핵심 이슈","Key Issues & Asks"],["04","CEO 요청사항","결정·협조 요청"],["05","Key Question","핵심 질문"]];
-  return <div className="content writer"><SectionTitle eyebrow="NEW WEEKLY UPDATE" title="주간 리더십 보고서 작성" description="필요한 항목만 작성하세요. 해당 없는 섹션은 비워두어도 됩니다." action={<label className="week-select">보고 주차<input value={draft.weekLabel} onChange={e=>update("weekLabel",e.target.value)}/></label>}/><div className="stepper">{titles.map((t,i)=><button className={step===i+1?"active":step>i+1?"done":""} onClick={()=>setStep(i+1)} key={t[0]}><span>{step>i+1?"✓":t[0]}</span><div><b>{t[1]}</b><small>{t[2]}</small></div></button>)}</div><section className="form-card"><div className="form-head"><span>{titles[step-1][0]}</span><div><h2>{titles[step-1][1]}</h2><p>{titles[step-1][2]}</p></div></div>{step===1&&<><p className="form-guide">출장, 외부 일정, 휴가 계획을 추가해 주세요.</p>{draft.travel.map((r,i)=><div className="entry-grid six" key={i}><label>구분<select value={r.type} onChange={e=>rowUpdate<Travel>("travel",i,"type",e.target.value)}><option>출장</option><option>휴가(연차)</option><option>외부일정</option></select></label><label>이름<input value={r.name} onChange={e=>rowUpdate<Travel>("travel",i,"name",e.target.value)}/></label><label>시작<input type="date" value={r.start} onChange={e=>rowUpdate<Travel>("travel",i,"start",e.target.value)}/></label><label>종료<input type="date" value={r.end} onChange={e=>rowUpdate<Travel>("travel",i,"end",e.target.value)}/></label><label>목적지<input value={r.destination} onChange={e=>rowUpdate<Travel>("travel",i,"destination",e.target.value)} placeholder="도시/장소"/></label><label>메모<input value={r.notes} onChange={e=>rowUpdate<Travel>("travel",i,"notes",e.target.value)} placeholder="인수인계 등"/></label><button className="remove" onClick={()=>update("travel",draft.travel.filter((_,x)=>x!==i))}>×</button></div>)}<button className="add-row" onClick={addTravel}>+ 출장·휴가 일정 추가</button></>}{step===2&&<><p className="form-guide">회의·워크샵·행사·Store Open·촬영·계약·제품 출시·외부방문·언론대응 등 주요 일정을 적어 주세요.</p>{draft.events.map((r,i)=><div className="entry-grid five" key={i}><label>날짜<input type="date" value={r.date} onChange={e=>rowUpdate<EventItem>("events",i,"date",e.target.value)}/></label><label>유형<input value={r.type} onChange={e=>rowUpdate<EventItem>("events",i,"type",e.target.value)}/></label><label>일정 설명<input value={r.description} onChange={e=>rowUpdate<EventItem>("events",i,"description",e.target.value)} placeholder="핵심 일정"/></label><label>장소<input value={r.location} onChange={e=>rowUpdate<EventItem>("events",i,"location",e.target.value)}/></label><label>메모<input value={r.notes} onChange={e=>rowUpdate<EventItem>("events",i,"notes",e.target.value)}/></label><button className="remove" onClick={()=>update("events",draft.events.filter((_,x)=>x!==i))}>×</button></div>)}<button className="add-row" onClick={addEvent}>+ 주요 일정 추가</button></>}{step===3&&<><p className="form-guide">대표님이 알아야 할 핵심 이슈, 과제, 판단이 필요한 사항을 작성해 주세요.</p>{draft.issues.map((r,i)=><div className="entry-grid three" key={i}><label>카테고리<select value={r.category} onChange={e=>rowUpdate<Issue>("issues",i,"category",e.target.value)}><option>핵심이슈</option><option>과제</option><option>의사결정</option><option>리스크</option></select></label><label>상세 내용<input value={r.details} onChange={e=>rowUpdate<Issue>("issues",i,"details",e.target.value)} placeholder="배경과 필요한 액션을 명확히 작성"/></label><label>일정·마감<input value={r.deadline} onChange={e=>rowUpdate<Issue>("issues",i,"deadline",e.target.value)} placeholder="예: 8월 말"/></label><button className="remove" onClick={()=>update("issues",draft.issues.filter((_,x)=>x!==i))}>×</button></div>)}<button className="add-row" onClick={addIssue}>+ 핵심 이슈 추가</button></>}{step===4&&<div className="large-field"><label>CEO 요청사항<textarea value={draft.ceoRequests} onChange={e=>update("ceoRequests",e.target.value)} placeholder="대표님의 확인, 결정, 지원이 필요한 사항을 작성해 주세요."/></label></div>}{step===5&&<div className="large-field"><label>Key Question<textarea value={draft.keyQuestion} onChange={e=>update("keyQuestion",e.target.value)} placeholder="이번 주 가장 중요한 하나의 질문을 작성해 주세요."/></label></div>}<div className="form-actions"><button className="secondary" onClick={()=>setStep(Math.max(1,step-1))} disabled={step===1}>← 이전</button>{step<5?<button className="primary" onClick={()=>setStep(step+1)}>다음 항목 →</button>:<button className="primary" onClick={submit} disabled={saving}>{saving?"제출 중...":"보고서 제출"}</button>}</div>{message&&<div className={message.includes("성공")?"success-box":"error-box"}>{message}</div>}</section></div>;
+  return <div className="content writer"><SectionTitle eyebrow="NEW WEEKLY UPDATE" title="주간 리더십 Schedule 작성" description="필요한 항목만 작성하세요. 해당 없는 섹션은 비워두어도 됩니다." action={<label className="week-select">보고 주차<input value={draft.weekLabel} onChange={e=>update("weekLabel",e.target.value)}/></label>}/><div className="stepper">{titles.map((t,i)=><button className={step===i+1?"active":step>i+1?"done":""} onClick={()=>setStep(i+1)} key={t[0]}><span>{step>i+1?"✓":t[0]}</span><div><b>{t[1]}</b><small>{t[2]}</small></div></button>)}</div><section className="form-card"><div className="form-head"><span>{titles[step-1][0]}</span><div><h2>{titles[step-1][1]}</h2><p>{titles[step-1][2]}</p></div></div>{step===1&&<><p className="form-guide">출장, 외부 일정, 휴가 계획을 추가해 주세요.</p>{draft.travel.map((r,i)=><div className="entry-grid six" key={i}><label>구분<select value={r.type} onChange={e=>rowUpdate<Travel>("travel",i,"type",e.target.value)}><option>출장</option><option>휴가(연차)</option><option>외부일정</option></select></label><label>이름<input value={r.name} onChange={e=>rowUpdate<Travel>("travel",i,"name",e.target.value)}/></label><label>시작<input type="date" value={r.start} onChange={e=>rowUpdate<Travel>("travel",i,"start",e.target.value)}/></label><label>종료<input type="date" value={r.end} onChange={e=>rowUpdate<Travel>("travel",i,"end",e.target.value)}/></label><label>목적지<input value={r.destination} onChange={e=>rowUpdate<Travel>("travel",i,"destination",e.target.value)} placeholder="도시/장소"/></label><label>메모<input value={r.notes} onChange={e=>rowUpdate<Travel>("travel",i,"notes",e.target.value)} placeholder="인수인계 등"/></label><button className="remove" onClick={()=>update("travel",draft.travel.filter((_,x)=>x!==i))}>×</button></div>)}<button className="add-row" onClick={addTravel}>+ 출장·휴가 일정 추가</button></>}{step===2&&<><p className="form-guide">회의·워크샵·행사·Store Open·촬영·계약·제품 출시·외부방문·언론대응 등 주요 일정을 적어 주세요.</p>{draft.events.map((r,i)=><div className="entry-grid five" key={i}><label>날짜<input type="date" value={r.date} onChange={e=>rowUpdate<EventItem>("events",i,"date",e.target.value)}/></label><label>유형<input value={r.type} onChange={e=>rowUpdate<EventItem>("events",i,"type",e.target.value)}/></label><label>일정 설명<input value={r.description} onChange={e=>rowUpdate<EventItem>("events",i,"description",e.target.value)} placeholder="핵심 일정"/></label><label>장소<input value={r.location} onChange={e=>rowUpdate<EventItem>("events",i,"location",e.target.value)}/></label><label>메모<input value={r.notes} onChange={e=>rowUpdate<EventItem>("events",i,"notes",e.target.value)}/></label><button className="remove" onClick={()=>update("events",draft.events.filter((_,x)=>x!==i))}>×</button></div>)}<button className="add-row" onClick={addEvent}>+ 주요 일정 추가</button></>}{step===3&&<><p className="form-guide">대표님이 알아야 할 핵심 이슈, 과제, 판단이 필요한 사항을 작성해 주세요.</p>{draft.issues.map((r,i)=><div className="entry-grid three" key={i}><label>카테고리<select value={r.category} onChange={e=>rowUpdate<Issue>("issues",i,"category",e.target.value)}><option>핵심이슈</option><option>과제</option><option>의사결정</option><option>리스크</option></select></label><label>상세 내용<input value={r.details} onChange={e=>rowUpdate<Issue>("issues",i,"details",e.target.value)} placeholder="배경과 필요한 액션을 명확히 작성"/></label><label>일정·마감<input value={r.deadline} onChange={e=>rowUpdate<Issue>("issues",i,"deadline",e.target.value)} placeholder="예: 8월 말"/></label><button className="remove" onClick={()=>update("issues",draft.issues.filter((_,x)=>x!==i))}>×</button></div>)}<button className="add-row" onClick={addIssue}>+ 핵심 이슈 추가</button></>}{step===4&&<div className="large-field"><label>CEO 요청사항<textarea value={draft.ceoRequests} onChange={e=>update("ceoRequests",e.target.value)} placeholder="대표님의 확인, 결정, 지원이 필요한 사항을 작성해 주세요."/></label></div>}{step===5&&<div className="large-field"><label>Key Question<textarea value={draft.keyQuestion} onChange={e=>update("keyQuestion",e.target.value)} placeholder="부서장이 하고있는 가장 중요한 질문 (한 주에만 해당되는 것은 아님)"/></label></div>}<div className="form-actions"><button className="secondary" onClick={()=>setStep(Math.max(1,step-1))} disabled={step===1}>← 이전</button>{step<5?<button className="primary" onClick={()=>setStep(step+1)}>다음 항목 →</button>:<button className="primary" onClick={submit} disabled={saving}>{saving?"제출 중...":"Schedule 제출"}</button>}</div>{message&&<div className={message.includes("성공")?"success-box":"error-box"}>{message}</div>}</section></div>;
 }
 
 function weekLabelSortKey(label: string) {
@@ -714,7 +760,7 @@ function AIWorkspace({ session }: { session: Session }) {
 
   return <div className="content ai-page">
     <SectionTitle
-      title="LeadFlow AI"
+      title="Leader Schedule AI"
       action={
         <div className="ai-toolbar date-range">
           <label>시작일<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
@@ -767,7 +813,7 @@ function AIWorkspace({ session }: { session: Session }) {
         <form className="modal summary-prompt-modal" onSubmit={summarize} onMouseDown={(e) => e.stopPropagation()}>
           <button type="button" className="drawer-close" onClick={() => setPromptOpen(false)}>×</button>
           <h2>추가 요약 요청</h2>
-          <p className="muted">기간 {from} — {to} 보고서에서 특히 요약하고 싶은 내용을 적어 주세요. 입력한 내용은 HTML 마지막 &lsquo;추가 요청사항&rsquo; 섹션에 반영됩니다.</p>
+          <p className="muted">기간 {from} — {to} Schedule에서 특히 요약하고 싶은 내용을 적어 주세요. 입력한 내용은 HTML 마지막 &lsquo;추가 요청사항&rsquo; 섹션에 반영됩니다.</p>
           <label>요약하고 싶은 내용
             <textarea
               value={extraFocus}
@@ -843,13 +889,13 @@ function AskChatbot({session}:{session:Session}){
     }
   }
   return <div className={`ask-fab${open?" open":""}`}>
-    {open&&<div className="ask-fab-panel" role="dialog" aria-label="LeadFlow 질문">
+    {open&&<div className="ask-fab-panel" role="dialog" aria-label="Leader Schedule 질문">
       <div className="ask-fab-head">
-        <div><b>LeadFlow AI</b><span>보고서에 대해 질문하세요</span></div>
+        <div><b>Leader Schedule AI</b><span>Schedule에 대해 질문하세요</span></div>
         <button type="button" className="ask-fab-close" onClick={()=>setOpen(false)} aria-label="닫기">×</button>
       </div>
       <div className="ask-fab-body" ref={bodyRef}>
-        {!messages.length&&<div className="chat-welcome"><p>보고서에 대해 질문하세요.</p></div>}
+        {!messages.length&&<div className="chat-welcome"><p>Schedule에 대해 질문하세요.</p></div>}
         {messages.map((m,i)=><div className={`bubble ${m.role}`} key={i}>{m.text}</div>)}
         {asking&&<div className="bubble ai asking">답변 작성 중…</div>}
       </div>
@@ -893,7 +939,7 @@ export function LeadFlowApp(){
     if(profile.role!=="admin"&&(page==="users"||page==="ai"))router.replace("/reports");
     if(profile.role==="admin"&&page==="write")router.replace("/reports");
   },[profile,page,router]);
-  if(loading)return <div className="loading-screen"><span className="brand-mark">L</span><p>LeadFlow를 열고 있습니다</p></div>;
+  if(loading)return <div className="loading-screen"><span className="brand-mark">L</span><p>Leader Schedule을 열고 있습니다</p></div>;
   if(!session||!profile)return <Login onLogin={(s,p)=>{setSession(s);setProfile(p);if(pathname==="/")router.replace("/reports")}}/>;
   if(profile.mustChangePassword)return <PasswordGate session={session} profile={profile} onDone={s=>{setSession(s);setProfile({...profile,mustChangePassword:false})}}/>;
   const setPage=(next:string)=>{const target=next==="calendar"?"reports":next;router.push(PAGE_PATHS[target]||"/reports")};

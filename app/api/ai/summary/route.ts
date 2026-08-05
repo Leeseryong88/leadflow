@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         from,
         to,
         extraFocus: focus,
-        html: sanitizeSummaryHtml(`<article class="ceo-brief"><header><p class="eyebrow">Weekly Leadership Update</p><h1>제출된 보고서 없음</h1><p class="period">${from} — ${to}</p></header><section><p>선택한 기간에 제출된 보고서가 없습니다.</p></section><section class="extra-request"><h2>06 추가 요청사항</h2><p>${focusHtml}</p></section></article>`),
+        html: sanitizeSummaryHtml(`<article class="ceo-brief"><header><p class="eyebrow">Weekly Leadership Update</p><h1>제출된 Schedule 없음</h1><p class="period">${from} — ${to}</p></header><section><p>선택한 기간에 제출된 Schedule이 없습니다.</p></section><section class="extra-request"><h2>06 추가 요청사항</h2><p>${focusHtml}</p></section></article>`),
         empty: true,
       });
     }

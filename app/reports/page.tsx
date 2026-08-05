@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LeadFlowApp } from "../LeadFlowApp";
 
 export const metadata: Metadata = {
-  title: "보고서 | LeadFlow",
+  title: "Schedule | Leader Schedule",
   description: "IIC Weely",
 };
 

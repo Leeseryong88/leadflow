@@ -10,7 +10,7 @@ export function sanitizeSummaryHtml(html: string) {
 
 export function buildSummaryPrompt(from: string, to: string, reports: unknown[], extraFocus = "") {
   const focus = extraFocus.trim();
-  return `당신은 LeadFlow의 CEO 주간 보고 에디터입니다.
+  return `당신은 Leader Schedule의 CEO 주간 보고 에디터입니다.
 기간 ${from} ~ ${to} 에 제출된 보고서를 바탕으로, 아래 섹션을 빠짐없이 전반적으로 요약한 HTML을 작성하세요.
 
 필수 섹션:

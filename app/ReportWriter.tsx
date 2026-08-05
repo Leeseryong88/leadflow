@@ -112,7 +112,7 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
       setShowKeyQuestion(false);
       setPickingTravelType(false);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "보고서를 제출하지 못했습니다.");
+      setMessage(error instanceof Error ? error.message : "Schedule을 제출하지 못했습니다.");
     } finally {
       setSaving(false);
     }
@@ -120,7 +120,7 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
 
   return <div className="report-compose">
     <div className="report-compose-head">
-      <div><h1>새 보고서 작성</h1></div>
+      <div><h1>새 Schedule 작성</h1></div>
       <div className="report-week-picker">
         <label>보고 기준일<input type="date" value={weekDate} onChange={(event) => {
           setWeekDate(event.target.value);
@@ -166,7 +166,7 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
         <SurveyHeader no="02" title="부서의 주요 일정" subtitle="Key Dates & Events" />
         {draft.events.map((row, index) => <div className={`entry-grid four${index > 0 ? " entry-follow" : ""}`} key={index}>
           <label><span className="field-label">날짜</span><input type="date" value={row.date} onChange={(event) => rowUpdate<EventItem>("events", index, "date", event.target.value)} aria-label="날짜" /></label>
-          <label><span className="field-label">유형</span><select value={row.type.startsWith(DIRECT_EVENT_TYPE) ? DIRECT_EVENT_TYPE : row.type} onChange={(event) => rowUpdate<EventItem>("events", index, "type", event.target.value)} aria-label="유형"><option value="">- 선택 -</option><option value="대표님 회의">대표님 회의</option><option value="워크샵">워크샵</option><option value="행사">행사</option><option value="Store Open">Store Open</option><option value="촬영">촬영</option><option value="계약">계약</option><option value="제품 출시">제품 출시</option><option value={DIRECT_EVENT_TYPE}>직접 입력</option></select>{row.type.startsWith(DIRECT_EVENT_TYPE)&&<input value={row.type.slice(DIRECT_EVENT_TYPE.length)} onChange={(event) => rowUpdate<EventItem>("events", index, "type", `${DIRECT_EVENT_TYPE}${event.target.value}`)} placeholder="유형을 입력하세요" aria-label="일정 유형 직접 입력" autoFocus/>}</label>
+          <label><span className="field-label">유형</span><select value={row.type.startsWith(DIRECT_EVENT_TYPE) ? DIRECT_EVENT_TYPE : row.type} onChange={(event) => rowUpdate<EventItem>("events", index, "type", event.target.value)} aria-label="유형"><option value="">- 선택 -</option><option value={DIRECT_EVENT_TYPE}>직접 입력</option><option value="대표님 회의">대표님 회의</option><option value="부서 회의">부서 회의</option><option value="워크샵">워크샵</option><option value="행사">행사</option><option value="Store Open">Store Open</option><option value="촬영">촬영</option><option value="계약">계약</option><option value="제품 출시">제품 출시</option><option value="공사">공사</option></select>{row.type.startsWith(DIRECT_EVENT_TYPE)&&<input value={row.type.slice(DIRECT_EVENT_TYPE.length)} onChange={(event) => rowUpdate<EventItem>("events", index, "type", `${DIRECT_EVENT_TYPE}${event.target.value}`)} placeholder="유형을 입력하세요" aria-label="일정 유형 직접 입력" autoFocus/>}</label>
           <label><span className="field-label">일정 설명</span><input value={row.description} onChange={(event) => rowUpdate<EventItem>("events", index, "description", event.target.value)} placeholder="핵심 일정" aria-label="일정 설명" /></label>
           <label><span className="field-label">장소</span><input value={row.location} onChange={(event) => rowUpdate<EventItem>("events", index, "location", event.target.value)} aria-label="장소" /></label>
           <button type="button" className="remove" aria-label="주요 일정 행 삭제" onClick={() => update("events", draft.events.filter((_, rowIndex) => rowIndex !== index))}>×</button>
@@ -201,7 +201,7 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
         <SurveyHeader no="05" title="Key Question" subtitle="핵심 질문" />
         {showKeyQuestion ? (
           <div className="large-field optional-field">
-            <label>Key Question<textarea value={draft.keyQuestion} onChange={(event) => update("keyQuestion", event.target.value)} placeholder="이번 주 가장 중요한 질문" /></label>
+            <label>Key Question<textarea value={draft.keyQuestion} onChange={(event) => update("keyQuestion", event.target.value)} placeholder="부서장이 하고있는 가장 중요한 질문 (한 주에만 해당되는 것은 아님)" /></label>
             <button type="button" className="remove-optional" onClick={() => { update("keyQuestion", ""); setShowKeyQuestion(false); }}>작성 취소</button>
           </div>
         ) : (
@@ -210,7 +210,7 @@ export function ReportWriter({ session, profile, onSaved, onClose }: { session: 
       </section>
 
       <div className="survey-submit">
-        <div className="survey-submit-actions"><button className="secondary" type="button" onClick={onClose}>취소</button><button className="primary" type="submit" disabled={saving}>{saving ? "제출 중..." : "보고서 제출"}</button></div>
+        <div className="survey-submit-actions"><button className="secondary" type="button" onClick={onClose}>취소</button><button className="primary" type="submit" disabled={saving}>{saving ? "제출 중..." : "Schedule 제출"}</button></div>
       </div>
       {message && <div className={message.includes("제출되었") ? "success-box" : "error-box"}>{message}</div>}
     </form>
