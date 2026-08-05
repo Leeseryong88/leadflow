@@ -31,6 +31,8 @@
 
 .mobile-report-create{display:none}
 
+.summary-html-view table{width:100%;border-collapse:collapse;margin:8px 0}.summary-html-view th,.summary-html-view td{border:1px solid #dfe5ef;padding:7px 9px;font-size:12px;text-align:left;vertical-align:top}.summary-html-view th{background:#f4f7fc;font-weight:700;color:#39465a;white-space:nowrap}.summary-html-view h3{margin:14px 0 6px;font-size:13px;color:var(--blue)}.collect-source-panel{margin-bottom:16px}.collect-select-actions{display:flex;align-items:center;gap:8px}.collect-select-actions .secondary{padding:7px 12px;font-size:11px}.collect-source-panel input[type="checkbox"]{width:15px;height:15px;accent-color:var(--blue)}
+
 @media(max-width:720px){
   .report-create-desktop{display:none}
   .mobile-report-create{

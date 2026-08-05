@@ -24,15 +24,19 @@ import {
 import { ReportWriter } from "./ReportWriter";
 
 const PAGE_PATHS: Record<string, string> = {
+  calendar: "/calendar",
   reports: "/reports",
   write: "/reports/write",
   users: "/users",
+  collect: "/collect",
   ai: "/ai",
 };
 
 function pageFromPath(pathname: string) {
   if (pathname.startsWith("/reports/write")) return "write";
+  if (pathname.startsWith("/calendar")) return "calendar";
   if (pathname.startsWith("/users")) return "users";
+  if (pathname.startsWith("/collect")) return "collect";
   if (pathname.startsWith("/ai")) return "ai";
   return "reports";
 }
@@ -59,7 +63,7 @@ const emptyDraft = () => ({
   weekLabel: weekLabelFromReportDate(),
   travel: [] as Travel[], events: [] as EventItem[], issues: [] as Issue[], ceoRequests: "", keyQuestion: "",
 });
-const navAdmin = [["reports", "Schedule", "▤"], ["users", "사용자 관리", "◎"], ["ai", "Leader Schedule AI", "✦"]];
+const navAdmin = [["calendar", "캘린더", "▦"], ["reports", "전체 Schedule", "▤"], ["users", "사용자 관리", "◎"], ["collect", "데이터 취합", "▥"], ["ai", "Leader Schedule AI", "✦"]];
 const navLeader = [["reports", "Schedule", "▤"]];
 const REPORTS_PAGE_SIZE = 8;
 
@@ -213,7 +217,7 @@ function TravelCalendar({
 }) {
   const weeks = buildCalendarWeeks(range, anchor);
   const inDay = (date: string) => items.filter((t) => t.start <= date && t.end >= date);
-  const laneLimit = range === "week" ? 16 : range === "fortnight" ? 10 : 3;
+  const laneLimit = range === "week" ? 24 : range === "fortnight" ? 11 : 3;
   const dense = range !== "month";
 
   function openDay(date: string) {
@@ -264,7 +268,9 @@ function TravelCalendar({
       const visibleLanes = Math.min(laneLimit, Math.max(1, ...segments.map((s) => s.lane + 1), 1));
       const visible = segments.filter((segment) => segment.lane < laneLimit);
       const hiddenCount = (col: number) => segments.filter((segment) => segment.lane >= laneLimit && segment.startCol <= col && segment.endCol >= col).length;
-      const weekHeight = dense ? 36 + visibleLanes * 24 : undefined;
+      // 주간·2주간 뷰는 월간 달력 전체 세로 길이에 맞춰 길게 표시한다 (일정이 더 많으면 그만큼 확장).
+      const baseWeekHeight = range === "week" ? 620 : 310;
+      const weekHeight = dense ? Math.max(baseWeekHeight, 36 + visibleLanes * 24) : undefined;
       return <div className="cal-week" key={weekIndex} style={weekHeight ? { minHeight: weekHeight } : undefined}>
         <div className="cal-week-days" style={weekHeight ? { minHeight: weekHeight } : undefined}>
           {week.map((date, i) => {
@@ -348,16 +354,23 @@ function AdminCalendarBoard({ reports, onSelectDay }: { reports: Report[]; onSel
   </div>;
 }
 
+function AdminCalendarPage({ reports }: { reports: Report[] }) {
+  const [dayTravel, setDayTravel] = useState<{ date: string; items: DayTravelItem[] } | null>(null);
+  return <div className="content admin-board">
+    <SectionTitle title="캘린더" />
+    <AdminCalendarBoard reports={reports} onSelectDay={(date, items) => setDayTravel({ date, items })} />
+    {dayTravel && <DayTravelViewer date={dayTravel.date} items={dayTravel.items} onClose={() => setDayTravel(null)} />}
+  </div>;
+}
+
 function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: Report[]; profile: Profile; session?: Session; onCreate?: () => void; onDeleted?: (id: string) => void }) {
   const [department, setDepartment] = useState("전체");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Report | null>(null);
-  const [dayTravel, setDayTravel] = useState<{ date: string; items: DayTravelItem[] } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Report | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [listMessage, setListMessage] = useState("");
-  const [adminTab, setAdminTab] = useState<"calendar" | "list">("calendar");
   const departments = ["전체", ...Array.from(new Set(reports.map((r) => r.department)))];
   const filtered = reports.filter((r) => (department === "전체" || r.department === department) && (`${r.authorName} ${r.weekLabel} ${r.department}`.toLowerCase().includes(query.toLowerCase())));
   const totalPages = Math.max(1, Math.ceil(filtered.length / REPORTS_PAGE_SIZE));
@@ -385,42 +398,30 @@ function Reports({ reports, profile, session, onCreate, onDeleted }: { reports: 
 
   if (profile.role === "admin") {
     return <div className="content admin-board">
-      <SectionTitle title="Schedule" />
-      <div className="subtabs" role="tablist" aria-label="Schedule 세부 탭">
-        <button type="button" role="tab" aria-selected={adminTab === "calendar"} className={adminTab === "calendar" ? "active" : ""} onClick={() => setAdminTab("calendar")}>캘린더</button>
-        <button type="button" role="tab" aria-selected={adminTab === "list"} className={adminTab === "list" ? "active" : ""} onClick={() => setAdminTab("list")}>전체 Schedule</button>
-      </div>
-
-      {adminTab === "calendar" && (
-        <AdminCalendarBoard reports={reports} onSelectDay={(date, items) => setDayTravel({ date, items })} />
-      )}
-
-      {adminTab === "list" && (
-        <section className="panel admin-reports-panel">
-          <div className="panel-head"><div><h3>전체 Schedule</h3></div><span className="result-count">{filtered.length}건</span></div>
-          <div className="filters compact">
-            <div className="search"><span>⌕</span><input placeholder="작성자, 부서, 주차 검색" value={query} onChange={(e) => updateQuery(e.target.value)} /></div>
-            <select value={department} onChange={(e) => updateDepartment(e.target.value)}>{departments.map((d) => <option key={d}>{d}</option>)}</select>
-          </div>
-          {listMessage && <div className={/삭제했습니다/.test(listMessage) ? "success-box" : "error-box"} style={{ margin: "0 18px 12px" }}>{listMessage}</div>}
-          <div className="admin-reports-body">
-            <ReportTable
-              reports={paged}
-              onSelect={setSelected}
-              onDelete={(report) => { setListMessage(""); setPendingDelete(report); }}
-              empty="조건에 맞는 Schedule이 없습니다."
-            />
-          </div>
-          <div className="pagination">
-            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>←</button>
-            <span>{currentPage} / {totalPages}</span>
-            <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>→</button>
-          </div>
-        </section>
-      )}
+      <SectionTitle title="전체 Schedule" />
+      <section className="panel admin-reports-panel">
+        <div className="panel-head"><div><h3>전체 Schedule</h3></div><span className="result-count">{filtered.length}건</span></div>
+        <div className="filters compact">
+          <div className="search"><span>⌕</span><input placeholder="작성자, 부서, 주차 검색" value={query} onChange={(e) => updateQuery(e.target.value)} /></div>
+          <select value={department} onChange={(e) => updateDepartment(e.target.value)}>{departments.map((d) => <option key={d}>{d}</option>)}</select>
+        </div>
+        {listMessage && <div className={/삭제했습니다/.test(listMessage) ? "success-box" : "error-box"} style={{ margin: "0 18px 12px" }}>{listMessage}</div>}
+        <div className="admin-reports-body">
+          <ReportTable
+            reports={paged}
+            onSelect={setSelected}
+            onDelete={(report) => { setListMessage(""); setPendingDelete(report); }}
+            empty="조건에 맞는 Schedule이 없습니다."
+          />
+        </div>
+        <div className="pagination">
+          <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>←</button>
+          <span>{currentPage} / {totalPages}</span>
+          <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>→</button>
+        </div>
+      </section>
 
       {selected && <ReportViewer report={selected} onClose={() => setSelected(null)} />}
-      {dayTravel && <DayTravelViewer date={dayTravel.date} items={dayTravel.items} onClose={() => setDayTravel(null)} />}
       {pendingDelete && (
         <div className="modal-backdrop" onMouseDown={() => !deleting && setPendingDelete(null)}>
           <div className="modal confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
@@ -696,6 +697,43 @@ function escapePrintText(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+const SUMMARY_DOC_CSS = `
+  @page{margin:18mm}
+  html,body{margin:0;padding:0;background:#fff}
+  body{padding:28px;color:#111f39;font:14px/1.65 "Noto Sans KR",Manrope,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .ceo-brief header{margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #1f5eff}
+  .ceo-brief .eyebrow{margin:0 0 8px;color:#1f5eff;font:500 12px "DM Mono",monospace;letter-spacing:.12em}
+  .ceo-brief h1{margin:0 0 8px;font-size:28px;letter-spacing:-.03em}
+  .ceo-brief .period{margin:0;color:#6d7788;font:500 12px "DM Mono",monospace}
+  .ceo-brief section{margin:22px 0;break-inside:avoid}
+  .ceo-brief h2{margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid #dfe5ef;font-size:16px}
+  .ceo-brief p,.ceo-brief li{font-size:13px;color:#24324a}
+  .ceo-brief ul{margin:0;padding-left:18px}
+  .ceo-brief li{margin:6px 0}
+  .ceo-brief table{width:100%;border-collapse:collapse;margin:8px 0}
+  .ceo-brief th,.ceo-brief td{border:1px solid #dfe5ef;padding:7px 9px;font-size:12px;text-align:left;vertical-align:top}
+  .ceo-brief th{background:#f4f7fc;font-weight:700;color:#39465a;white-space:nowrap}
+  .ceo-brief h3{margin:14px 0 6px;font-size:13px;color:#1f5eff}
+`;
+
+function buildSummaryDocument(title: string, html: string) {
+  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><title>${escapePrintText(title || "문서")}</title>
+<style>${SUMMARY_DOC_CSS}</style></head><body>${html}</body></html>`;
+}
+
+function downloadSummaryHtml(title: string, html: string) {
+  if (!html?.trim() || typeof document === "undefined") return;
+  const blob = new Blob([buildSummaryDocument(title, html)], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${(title || "문서").replace(/[\\/:*?"<>|]/g, "_")}.html`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function printSummaryHtml(title: string, html: string) {
   if (!html?.trim() || typeof document === "undefined") return;
 
@@ -713,21 +751,7 @@ function printSummaryHtml(title: string, html: string) {
   }
 
   doc.open();
-  doc.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><title>${escapePrintText(title || "요약")}</title>
-<style>
-  @page{margin:18mm}
-  html,body{margin:0;padding:0;background:#fff}
-  body{padding:28px;color:#111f39;font:14px/1.65 "Noto Sans KR",Manrope,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .ceo-brief header{margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #1f5eff}
-  .ceo-brief .eyebrow{margin:0 0 8px;color:#1f5eff;font:500 12px "DM Mono",monospace;letter-spacing:.12em}
-  .ceo-brief h1{margin:0 0 8px;font-size:28px;letter-spacing:-.03em}
-  .ceo-brief .period{margin:0;color:#6d7788;font:500 12px "DM Mono",monospace}
-  .ceo-brief section{margin:22px 0;break-inside:avoid}
-  .ceo-brief h2{margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid #dfe5ef;font-size:16px}
-  .ceo-brief p,.ceo-brief li{font-size:13px;color:#24324a}
-  .ceo-brief ul{margin:0;padding-left:18px}
-  .ceo-brief li{margin:6px 0}
-</style></head><body>${html}</body></html>`);
+  doc.write(buildSummaryDocument(title, html));
   doc.close();
 
   let cleaned = false;
@@ -761,6 +785,247 @@ function fmtDateTime(value: string) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+const COLLECT_TITLE_PREFIX = "[취합]";
+
+/** 선택한 원본 Schedule들을 섹션별로 묶어 하나의 정리된 HTML 문서로 만든다. */
+function buildCollectHtml(reports: Report[], from: string, to: string) {
+  const esc = escapePrintText;
+  const multiline = (value: string) => esc(value).replace(/\n/g, "<br/>");
+  const departments = Array.from(new Set(reports.map((r) => r.department)));
+
+  const travels = reports
+    .flatMap((r) => (r.travel || []).map((t) => ({ ...t, department: r.department, name: t.name || r.authorName })))
+    .sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  const events = reports
+    .flatMap((r) => (r.events || []).map((t) => ({ ...t, department: r.department })))
+    .filter((t) => (t.date || t.type || t.description || "").trim())
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const issues = reports
+    .flatMap((r) => (r.issues || []).map((t) => ({ ...t, department: r.department, author: r.authorName })))
+    .filter((t) => (t.details || "").trim());
+  const ceoRequests = reports.filter((r) => (r.ceoRequests || "").trim());
+  const keyQuestions = reports.filter((r) => (r.keyQuestion || "").trim());
+
+  const travelTable = travels.length
+    ? `<table><thead><tr><th>구분</th><th>부서</th><th>이름</th><th>기간</th><th>목적지</th><th>목적</th></tr></thead><tbody>${travels.map((t) => {
+      const isLeave = t.type.includes("휴가");
+      const period = t.end && t.end !== t.start ? `${t.start} ~ ${t.end}` : t.start;
+      return `<tr><td>${esc(isLeave ? "휴가" : "출장")}</td><td>${esc(t.department)}</td><td>${esc(t.name)}</td><td>${esc(period)}</td><td>${esc(isLeave ? "-" : t.destination || "-")}</td><td>${esc(isLeave ? "-" : t.purpose || "-")}</td></tr>`;
+    }).join("")}</tbody></table>`
+    : "<p>해당 없음</p>";
+
+  const eventTable = events.length
+    ? `<table><thead><tr><th>날짜</th><th>부서</th><th>유형</th><th>일정 설명</th><th>장소</th></tr></thead><tbody>${events.map((t) => (
+      `<tr><td>${esc(t.date || "-")}</td><td>${esc(t.department)}</td><td>${esc(t.type || "-")}</td><td>${esc(t.description || "-")}</td><td>${esc(t.location || "-")}</td></tr>`
+    )).join("")}</tbody></table>`
+    : "<p>해당 없음</p>";
+
+  const issueTable = issues.length
+    ? `<table><thead><tr><th>부서</th><th>작성자</th><th>카테고리</th><th>상세 내용</th><th>일정·마감</th></tr></thead><tbody>${issues.map((t) => (
+      `<tr><td>${esc(t.department)}</td><td>${esc(t.author)}</td><td>${esc(t.category || "-")}</td><td>${esc(t.details)}</td><td>${esc(t.deadline || "-")}</td></tr>`
+    )).join("")}</tbody></table>`
+    : "<p>해당 없음</p>";
+
+  const ceoHtml = ceoRequests.length
+    ? ceoRequests.map((r) => `<h3>${esc(r.department)} · ${esc(r.authorName)}</h3><p>${multiline(r.ceoRequests)}</p>`).join("")
+    : "<p>해당 없음</p>";
+  const keyHtml = keyQuestions.length
+    ? keyQuestions.map((r) => `<h3>${esc(r.department)} · ${esc(r.authorName)}</h3><p>${multiline(r.keyQuestion)}</p>`).join("")
+    : "<p>해당 없음</p>";
+
+  return `<article class="ceo-brief"><header><p class="eyebrow">DATA COMPILATION</p><h1>Schedule 취합 문서</h1><p class="period">${esc(from)} — ${esc(to)} · ${reports.length}건 · ${departments.length}개 부서</p></header>
+<section><h2>01 출장 및 휴가</h2>${travelTable}</section>
+<section><h2>02 부서의 주요 일정</h2>${eventTable}</section>
+<section><h2>03 부서의 핵심 이슈</h2>${issueTable}</section>
+<section><h2>04 CEO 요청사항</h2>${ceoHtml}</section>
+<section><h2>05 Key Question</h2>${keyHtml}</section></article>`;
+}
+
+function DataCollectPage({ session, reports }: { session: Session; reports: Report[] }) {
+  const [from, setFrom] = useState(today.slice(0, 8) + "01");
+  const [to, setTo] = useState(today);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [doc, setDoc] = useState<PeriodSummary | null>(null);
+  const [docFromSaved, setDocFromSaved] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<SavedSummary[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<SavedSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const inRange = reports.filter((r) => {
+    const d = String(r.submittedAt || "").slice(0, 10);
+    return d >= from && d <= to;
+  });
+  const selected = inRange.filter((r) => !excluded.has(r.id));
+
+  async function refreshSaved() {
+    try {
+      setSaved((await listSavedSummaries<SavedSummary>(session.idToken)).filter((item) => item.title.startsWith(COLLECT_TITLE_PREFIX)));
+    } catch {
+      setSaved([]);
+    }
+  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void refreshSaved(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [session.idToken]);
+
+  function toggle(id: string) {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function collect() {
+    setError(""); setNotice("");
+    if (!selected.length) { setError("취합할 Schedule을 선택해 주세요."); return; }
+    const title = `${COLLECT_TITLE_PREFIX} ${from} — ${to} Schedule 취합`;
+    setDoc({ title, from, to, html: buildCollectHtml(selected, from, to) });
+    setDocFromSaved(false);
+    setPreviewOpen(true);
+  }
+
+  async function saveDoc() {
+    if (!doc?.html) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const result = await callFunction<{ item: SavedSummary }>("savePeriodSummary", {
+        title: doc.title, from: doc.from, to: doc.to, html: doc.html,
+      }, session.idToken);
+      setSaved((current) => [result.item, ...current.filter((item) => item.id !== result.item.id)]);
+      setDocFromSaved(true);
+      setNotice("취합 문서를 저장했습니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "취합 문서를 저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openSaved(item: SavedSummary) {
+    setDoc({ title: item.title, from: item.from, to: item.to, html: item.html });
+    setDocFromSaved(true);
+    setError(""); setNotice("");
+    setPreviewOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true); setError(""); setNotice("");
+    try {
+      const result = await deleteSavedSummary(pendingDelete.id, session.idToken);
+      setSaved((current) => current.filter((item) => item.id !== pendingDelete.id));
+      setNotice(result.message);
+      setPendingDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "삭제하지 못했습니다.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return <div className="content">
+    <SectionTitle
+      title="데이터 취합"
+      description="기간별로 작성된 원본 Schedule을 선택해 하나의 정리된 문서로 만듭니다."
+      action={
+        <div className="ai-toolbar date-range">
+          <label>시작일<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          <span>—</span>
+          <label>종료일<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+          <button className="primary" onClick={collect} disabled={!selected.length}>취합</button>
+        </div>
+      }
+    />
+    {error && <div className="error-box" style={{ marginBottom: 14 }}>{error}</div>}
+    {notice && <div className="success-box" style={{ marginBottom: 14 }}>{notice}</div>}
+
+    <section className="panel collect-source-panel">
+      <div className="panel-head">
+        <div><h3>원본 데이터</h3></div>
+        <div className="collect-select-actions">
+          <span className="result-count">{selected.length}/{inRange.length}건 선택</span>
+          <button type="button" className="secondary" onClick={() => setExcluded(new Set())}>전체 선택</button>
+          <button type="button" className="secondary" onClick={() => setExcluded(new Set(inRange.map((r) => r.id)))}>전체 해제</button>
+        </div>
+      </div>
+      {!inRange.length
+        ? <div className="empty"><span>▥</span><p>선택한 기간에 제출된 Schedule이 없습니다.</p></div>
+        : <div className="table-wrap"><table>
+          <thead><tr><th style={{ width: 44 }}></th><th>주차</th><th>부서</th><th>작성자</th><th>제출일</th></tr></thead>
+          <tbody>{inRange.map((r) => {
+            const checked = !excluded.has(r.id);
+            return <tr key={r.id} onClick={() => toggle(r.id)} style={{ cursor: "pointer" }}>
+              <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked} onChange={() => toggle(r.id)} aria-label={`${r.authorName} ${r.weekLabel} 선택`} /></td>
+              <td><b>{r.weekLabel}</b></td>
+              <td><span className="dept-tag">{r.department}</span></td>
+              <td>{r.authorName}</td>
+              <td>{fmtDate(r.submittedAt)}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+    </section>
+
+    <section className="panel saved-summaries">
+      <div className="panel-head"><div><h3>저장된 취합 문서</h3></div><span className="result-count">{saved.length}건</span></div>
+      <div className="saved-summary-list">
+        {!saved.length && <div className="empty compact"><p>저장된 취합 문서가 없습니다.</p></div>}
+        {saved.map((item) => (
+          <div key={item.id} className="saved-summary-item">
+            <button type="button" className="saved-summary-open" onClick={() => openSaved(item)}>
+              <b>{item.title}</b>
+              <span>{item.from} — {item.to}</span>
+              <small>{fmtDateTime(item.createdAt)}</small>
+            </button>
+            <button type="button" className="saved-summary-delete" onClick={() => downloadSummaryHtml(item.title, item.html)}>다운로드</button>
+            <button type="button" className="danger-text saved-summary-delete" onClick={() => { setError(""); setNotice(""); setPendingDelete(item); }}>삭제</button>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    {previewOpen && doc && (
+      <div className="report-view-backdrop" onMouseDown={() => setPreviewOpen(false)}>
+        <article className="report-view-modal summary-preview-modal" role="dialog" aria-modal="true" aria-label="취합 문서 미리보기" onMouseDown={(e) => e.stopPropagation()}>
+          <button type="button" className="drawer-close" onClick={() => setPreviewOpen(false)}>×</button>
+          <div className="summary-html-toolbar modal-toolbar">
+            <div>
+              <b>{doc.title}</b>
+              <span>{doc.from} — {doc.to}</span>
+            </div>
+            <div className="summary-html-actions">
+              <button type="button" className="secondary" onClick={() => downloadSummaryHtml(doc.title, doc.html)}>다운로드</button>
+              {!docFromSaved && <button type="button" className="primary" onClick={saveDoc} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>}
+            </div>
+          </div>
+          {notice && <div className="success-box" style={{ margin: "0 0 14px" }}>{notice}</div>}
+          {error && <div className="error-box" style={{ margin: "0 0 14px" }}>{error}</div>}
+          <div className="summary-html-view modal-view" dangerouslySetInnerHTML={{ __html: doc.html }} />
+        </article>
+      </div>
+    )}
+
+    {pendingDelete && (
+      <div className="modal-backdrop" onMouseDown={() => !deleting && setPendingDelete(null)}>
+        <div className="modal confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
+          <h2>취합 문서 삭제</h2>
+          <p className="muted"><b>{pendingDelete.title}</b> 문서를 삭제할까요?<br />삭제 후 복구할 수 없습니다.</p>
+          <div className="confirm-actions">
+            <button type="button" className="secondary" disabled={deleting} onClick={() => setPendingDelete(null)}>취소</button>
+            <button type="button" className="danger" disabled={deleting} onClick={confirmDelete}>{deleting ? "삭제 중..." : "삭제"}</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>;
+}
+
 function AIWorkspace({ session }: { session: Session }) {
   const [from, setFrom] = useState(today.slice(0, 8) + "01");
   const [to, setTo] = useState(today);
@@ -779,7 +1044,7 @@ function AIWorkspace({ session }: { session: Session }) {
 
   async function refreshSaved() {
     try {
-      setSaved(await listSavedSummaries<SavedSummary>(session.idToken));
+      setSaved((await listSavedSummaries<SavedSummary>(session.idToken)).filter((item) => !item.title.startsWith(COLLECT_TITLE_PREFIX)));
     } catch {
       setSaved([]);
     }
@@ -1051,17 +1316,17 @@ export function LeadFlowApp(){
   },[session,profile]);
   useEffect(()=>{
     if(!profile)return;
-    if(profile.role!=="admin"&&(page==="users"||page==="ai"))router.replace("/reports");
+    if(profile.role!=="admin"&&(page==="users"||page==="ai"||page==="calendar"||page==="collect"))router.replace("/reports");
     if(profile.role==="admin"&&page==="write")router.replace("/reports");
   },[profile,page,router]);
   if(loading)return <div className="loading-screen"><span className="brand-mark">L</span><p>Leader Schedule을 열고 있습니다</p></div>;
   if(!session||!profile)return <Login onLogin={(s,p)=>{setSession(s);setProfile(p);if(pathname==="/")router.replace("/reports")}}/>;
   if(profile.mustChangePassword)return <PasswordGate session={session} profile={profile} onDone={s=>{setSession(s);setProfile({...profile,mustChangePassword:false})}}/>;
-  const setPage=(next:string)=>{const target=next==="calendar"?"reports":next;router.push(PAGE_PATHS[target]||"/reports")};
+  const setPage=(next:string)=>{router.push(PAGE_PATHS[next]||"/reports")};
   const logout=()=>{clearSession();setSession(null);setProfile(null);router.replace("/reports")};
   const openReportWriter=()=>router.push("/reports/write");
   const closeReportWriter=()=>router.push("/reports");
-  const body=page==="write"?<div className="content writer-page"><ReportWriter session={session} profile={profile} onClose={closeReportWriter} onSaved={report=>{setReports(current=>[report,...current]);router.push("/reports")}}/></div>:page==="reports"?<Reports reports={reports} profile={profile} session={session} onCreate={profile.role!=="admin"?openReportWriter:undefined} onDeleted={(id)=>setReports((current)=>current.filter((report)=>report.id!==id))}/>:page==="users"?<Users session={session} profile={profile} reports={reports}/>:page==="ai"?<AIWorkspace session={session}/>:null;
+  const body=page==="write"?<div className="content writer-page"><ReportWriter session={session} profile={profile} onClose={closeReportWriter} onSaved={report=>{setReports(current=>[report,...current]);router.push("/reports")}}/></div>:page==="calendar"?<AdminCalendarPage reports={reports}/>:page==="reports"?<Reports reports={reports} profile={profile} session={session} onCreate={profile.role!=="admin"?openReportWriter:undefined} onDeleted={(id)=>setReports((current)=>current.filter((report)=>report.id!==id))}/>:page==="users"?<Users session={session} profile={profile} reports={reports}/>:page==="collect"?<DataCollectPage session={session} reports={reports}/>:page==="ai"?<AIWorkspace session={session}/>:null;
   return <div className="app-shell">
     <Sidebar profile={profile} page={page==="write"?"reports":page} setPage={setPage}/>
     <div className="main"><Header profile={profile} onLogout={logout}/>{body}</div>
